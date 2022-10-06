@@ -1,4 +1,4 @@
-package mediatransportutil
+package bucket
 
 import (
 	"encoding/binary"
@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	maxPktSize     = 1500
+	MaxPktSize     = 1500
 	pktSizeHeader  = 2
 	seqNumOffset   = 2
 	seqNumSize     = 2
@@ -29,7 +29,7 @@ func NewBucket(buf *[]byte) *Bucket {
 	b := &Bucket{
 		src:      buf,
 		buf:      *buf,
-		maxSteps: int(math.Floor(float64(len(*buf)) / float64(maxPktSize))),
+		maxSteps: int(math.Floor(float64(len(*buf)) / float64(MaxPktSize))),
 	}
 
 	b.invalidate(0, b.maxSteps)
@@ -38,6 +38,10 @@ func NewBucket(buf *[]byte) *Bucket {
 
 func (b *Bucket) ResyncOnNextPacket() {
 	b.resyncOnNextPacket = true
+}
+
+func (b *Bucket) Src() *[]byte {
+	return b.src
 }
 
 func (b *Bucket) AddPacket(pkt []byte) ([]byte, error) {
@@ -159,7 +163,7 @@ func (b *Bucket) wrap(slot int) int {
 }
 
 func (b *Bucket) offset(slot int) int {
-	return b.wrap(slot) * maxPktSize
+	return b.wrap(slot) * MaxPktSize
 }
 
 func (b *Bucket) invalidate(startSlot int, numSlots int) {
