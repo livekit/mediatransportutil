@@ -54,7 +54,7 @@ func Test_queue(t *testing.T) {
 
 	expectedSN := uint16(6)
 	np := rtp.Packet{}
-	buff := make([]byte, maxPktSize)
+	buff := make([]byte, MaxPktSize)
 	i, err := q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
@@ -152,7 +152,7 @@ func Test_queue_edges(t *testing.T) {
 
 	expectedSN := uint16(65534)
 	np := rtp.Packet{}
-	buff := make([]byte, maxPktSize)
+	buff := make([]byte, MaxPktSize)
 	i, err := q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
@@ -230,7 +230,7 @@ func Test_queue_wrap(t *testing.T) {
 		})
 	}
 
-	buff := make([]byte, maxPktSize)
+	buff := make([]byte, MaxPktSize)
 
 	// try to get old packets, but were valid before the bucket wrapped
 	_, err := q.GetPacket(buff, 1)
