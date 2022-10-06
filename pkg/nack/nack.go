@@ -13,7 +13,7 @@ const (
 	minInterval   = 20 * time.Millisecond  // minimum interval between NACK tries for the same sequence number
 	maxInterval   = 400 * time.Millisecond // maximum interval between NACK tries for the same sequence number
 	initialDelay  = 10 * time.Millisecond  // delay before NACKing a sequence number to allow for out-of-order packets
-	backoffFactor = float64(1.25)
+	BackoffFactor = float64(1.25)
 )
 
 type NackQueue struct {
