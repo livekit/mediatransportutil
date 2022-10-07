@@ -12,7 +12,6 @@ const (
 	cacheSize     = 100                    // Max NACK sn the sfu will keep reference
 	minInterval   = 20 * time.Millisecond  // minimum interval between NACK tries for the same sequence number
 	maxInterval   = 400 * time.Millisecond // maximum interval between NACK tries for the same sequence number
-	initialDelay  = 10 * time.Millisecond  // delay before NACKing a sequence number to allow for out-of-order packets
 	BackoffFactor = float64(1.25)
 )
 
