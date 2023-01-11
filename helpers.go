@@ -1,6 +1,8 @@
 package mediatransportutil
 
 import (
+	"errors"
+	"fmt"
 	"math"
 	"time"
 
@@ -40,18 +42,28 @@ func ToNtpTime(t time.Time) NtpTime {
 
 // ------------------------------------------
 
-func GetRttMs(report *rtcp.ReceptionReport) uint32 {
+func GetRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.Time) (uint32, error) {
 	if report.LastSenderReport == 0 {
-		return 0
+		return 0, errors.New("no last SR")
+	}
+
+	if report.LastSenderReport != uint32((lastSRNTP>>16)&0xFFFFFFFF) {
+		return 0, fmt.Errorf("not last SR, lastSR: 0x%x, received: 0x%x", uint32((lastSRNTP>>16)&0xFFFFFFFF), report.LastSenderReport)
+	}
+
+	if lastSentAt.IsZero() {
+		return 0, errors.New("no last send time")
 	}
 
 	// RTT calculation reference: https://datatracker.ietf.org/doc/html/rfc3550#section-6.4.1
 
+	timeSinceLastSR := time.Since(lastSentAt)
+	nowNTP := uint32(ToNtpTime(lastSRNTP.Time().Add(timeSinceLastSR)) >> 16)
+
 	// middle 32-bits of current NTP time
-	now := uint32(ToNtpTime(time.Now()) >> 16)
-	if now < (report.LastSenderReport + report.Delay) {
-		return 0
+	if nowNTP < (report.LastSenderReport + report.Delay) {
+		return 0, fmt.Errorf("anachronous, nowNTP: %d, lsr: %d, delay: %d, lastSentAt: %+v, since: %+v", nowNTP, report.LastSenderReport, report.Delay, lastSentAt, timeSinceLastSR)
 	}
-	ntpDiff := now - report.LastSenderReport - report.Delay
-	return uint32(math.Ceil(float64(ntpDiff) * 1000.0 / 65536.0))
+	ntpDiff := nowNTP - report.LastSenderReport - report.Delay
+	return uint32(math.Ceil(float64(ntpDiff) * 1000.0 / 65536.0)), nil
 }

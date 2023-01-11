@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	defaultRtt    = 70                     // default RTT in ms
 	maxTries      = 5                      // Max number of times a packet will be NACKed
 	cacheSize     = 100                    // Max NACK sn the sfu will keep reference
 	minInterval   = 20 * time.Millisecond  // minimum interval between NACK tries for the same sequence number
@@ -23,12 +24,16 @@ type NackQueue struct {
 func NewNACKQueue() *NackQueue {
 	return &NackQueue{
 		nacks: make([]*nack, 0, cacheSize),
-		rtt:   70,
+		rtt:   defaultRtt,
 	}
 }
 
 func (n *NackQueue) SetRTT(rtt uint32) {
-	n.rtt = rtt
+	if rtt == 0 {
+		n.rtt = defaultRtt
+	} else {
+		n.rtt = rtt
+	}
 }
 
 func (n *NackQueue) Remove(sn uint16) {
