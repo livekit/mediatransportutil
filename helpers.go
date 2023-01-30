@@ -42,17 +42,24 @@ func ToNtpTime(t time.Time) NtpTime {
 
 // ------------------------------------------
 
+var (
+	ErrRttNoLastSenderReport      = errors.New("no last sender report")
+	ErrRttNotLastSenderReport     = errors.New("not last sender report")
+	ErrRttNoLastSendTime          = errors.New("no last sent time")
+	ErrRttAnachronousSenderReport = errors.New("anachronous sender report")
+)
+
 func getRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.Time, ignoreLast bool) (uint32, error) {
 	if report.LastSenderReport == 0 {
-		return 0, errors.New("no last SR")
+		return 0, ErrRttNoLastSenderReport
 	}
 
 	if !ignoreLast && report.LastSenderReport != uint32((lastSRNTP>>16)&0xFFFFFFFF) {
-		return 0, fmt.Errorf("not last SR, lastSR: 0x%x, received: 0x%x", uint32((lastSRNTP>>16)&0xFFFFFFFF), report.LastSenderReport)
+		return 0, fmt.Errorf("%w, lastSR: 0x%x, received: 0x%x", ErrRttNotLastSenderReport, uint32((lastSRNTP>>16)&0xFFFFFFFF), report.LastSenderReport)
 	}
 
 	if !ignoreLast && lastSentAt.IsZero() {
-		return 0, errors.New("no last send time")
+		return 0, ErrRttNoLastSendTime
 	}
 
 	// RTT calculation reference: https://datatracker.ietf.org/doc/html/rfc3550#section-6.4.1
@@ -67,7 +74,7 @@ func getRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 		nowNTP = uint32(ToNtpTime(time.Now()) >> 16)
 	}
 	if nowNTP < (report.LastSenderReport + report.Delay) {
-		return 0, fmt.Errorf("anachronous, nowNTP: %d, lsr: %d, delay: %d, lastSentAt: %+v, since: %+v", nowNTP, report.LastSenderReport, report.Delay, lastSentAt, timeSinceLastSR)
+		return 0, fmt.Errorf("%w, nowNTP: %d, lsr: %d, delay: %d, lastSentAt: %+v, since: %+v", ErrRttAnachronousSenderReport, nowNTP, report.LastSenderReport, report.Delay, lastSentAt, timeSinceLastSR)
 	}
 
 	ntpDiff := nowNTP - report.LastSenderReport - report.Delay
