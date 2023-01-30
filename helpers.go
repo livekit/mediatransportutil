@@ -59,7 +59,7 @@ func getRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 	}
 
 	if !ignoreLast && lastSentAt.IsZero() {
-		return 0, errors.New("no last send time")
+		return 0, ErrNoLastSendTime
 	}
 
 	// RTT calculation reference: https://datatracker.ietf.org/doc/html/rfc3550#section-6.4.1
