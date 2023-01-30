@@ -59,8 +59,9 @@ func getRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 
 	// middle 32-bits of current NTP time
 	var nowNTP uint32
-	timeSinceLastSR := time.Since(lastSentAt)
+	timeSinceLastSR := time.Duration(0)
 	if !ignoreLast {
+		timeSinceLastSR = time.Since(lastSentAt)
 		nowNTP = uint32(ToNtpTime(lastSRNTP.Time().Add(timeSinceLastSR)) >> 16)
 	} else {
 		nowNTP = uint32(ToNtpTime(time.Now()) >> 16)
