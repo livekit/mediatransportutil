@@ -1,9 +1,9 @@
 module github.com/livekit/mediatransportutil
 
-go 1.17
+go 1.18
 
 require (
-	github.com/gammazero/deque v0.1.0
+	github.com/gammazero/deque v0.2.1
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.7.13
 	github.com/stretchr/testify v1.8.0
