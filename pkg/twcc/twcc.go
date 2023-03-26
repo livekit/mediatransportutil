@@ -127,7 +127,7 @@ func (t *Responder) buildTransportCCPacket() rtcp.RawPacket {
 	lastStatus := rtcp.TypeTCCPacketReceivedWithoutDelta
 	maxStatus := rtcp.TypeTCCPacketNotReceived
 
-	var statusList deque.Deque
+	var statusList deque.Deque[uint16]
 	statusList.SetMinCapacity(3)
 
 	for _, stat := range tccPkts {
@@ -184,7 +184,7 @@ func (t *Responder) buildTransportCCPacket() rtcp.RawPacket {
 
 		if !same && maxStatus == rtcp.TypeTCCPacketReceivedLargeDelta && statusList.Len() > 6 {
 			for i := 0; i < 7; i++ {
-				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeTwoBit, statusList.PopFront().(uint16), i)
+				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeTwoBit, statusList.PopFront(), i)
 			}
 			t.writeStatusSymbolChunk(rtcp.TypeTCCSymbolSizeTwoBit)
 			lastStatus = rtcp.TypeTCCPacketReceivedWithoutDelta
@@ -192,7 +192,7 @@ func (t *Responder) buildTransportCCPacket() rtcp.RawPacket {
 			same = true
 
 			for i := 0; i < statusList.Len(); i++ {
-				status = statusList.At(i).(uint16)
+				status = statusList.At(i)
 				if status > maxStatus {
 					maxStatus = status
 				}
@@ -203,7 +203,7 @@ func (t *Responder) buildTransportCCPacket() rtcp.RawPacket {
 			}
 		} else if !same && statusList.Len() > 13 {
 			for i := 0; i < 14; i++ {
-				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeOneBit, statusList.PopFront().(uint16), i)
+				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeOneBit, statusList.PopFront(), i)
 			}
 			t.writeStatusSymbolChunk(rtcp.TypeTCCSymbolSizeOneBit)
 			lastStatus = rtcp.TypeTCCPacketReceivedWithoutDelta
@@ -217,12 +217,12 @@ func (t *Responder) buildTransportCCPacket() rtcp.RawPacket {
 			t.writeRunLengthChunk(lastStatus, uint16(statusList.Len()))
 		} else if maxStatus == rtcp.TypeTCCPacketReceivedLargeDelta {
 			for i := 0; i < statusList.Len(); i++ {
-				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeTwoBit, statusList.PopFront().(uint16), i)
+				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeTwoBit, statusList.PopFront(), i)
 			}
 			t.writeStatusSymbolChunk(rtcp.TypeTCCSymbolSizeTwoBit)
 		} else {
 			for i := 0; i < statusList.Len(); i++ {
-				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeOneBit, statusList.PopFront().(uint16), i)
+				t.createStatusSymbolChunk(rtcp.TypeTCCSymbolSizeOneBit, statusList.PopFront(), i)
 			}
 			t.writeStatusSymbolChunk(rtcp.TypeTCCSymbolSizeOneBit)
 		}
