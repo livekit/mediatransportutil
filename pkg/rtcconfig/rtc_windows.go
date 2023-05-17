@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-package rtcconfg
+package rtcconfig
 
 func checkUDPReadBuffer() {
 }
