@@ -33,14 +33,6 @@ type RTCConfig struct {
 	ForceTCP bool `yaml:"force_tcp,omitempty"`
 }
 
-type TURNServer struct {
-	Host       string `yaml:"host"`
-	Port       int    `yaml:"port"`
-	Protocol   string `yaml:"protocol"`
-	Username   string `yaml:"username,omitempty"`
-	Credential string `yaml:"credential,omitempty"`
-}
-
 type InterfacesConfig struct {
 	Includes []string `yaml:"includes,omitempty"`
 	Excludes []string `yaml:"excludes,omitempty"`
