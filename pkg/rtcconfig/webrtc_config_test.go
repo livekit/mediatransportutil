@@ -3,6 +3,8 @@ package rtcconfig
 import (
 	"net"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func Test_IPFilterFromConf(t *testing.T) {
@@ -12,10 +14,7 @@ func Test_IPFilterFromConf(t *testing.T) {
 	}
 
 	ipFilter, err := IPFilterFromConf(testData)
-
-	if err != nil {
-		t.Errorf("IPFilterFromConf returned an error: %v", err)
-	}
+	require.NoError(t, err)
 
 	testCases := []struct {
 		ip       string
@@ -44,10 +43,7 @@ func Test_IPFilterFromConf(t *testing.T) {
 		Excludes: []string{"192.168.128.0/17"},
 	}
 	_, err = IPFilterFromConf(testData)
-	// expect error
-	if err == nil {
-		t.Errorf("IPFilterFromConf should have returned `invalid CIDR address` error")
-	}
+	require.Error(t, err)
 }
 
 func Test_InterfaceFilterFromConf(t *testing.T) {
