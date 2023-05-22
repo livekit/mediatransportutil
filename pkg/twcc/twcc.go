@@ -66,8 +66,20 @@ func (t *Responder) Push(sn uint16, timeNS int64, marker bool) {
 	if sn < 0x0fff && (t.lastSn&0xffff) > 0xf000 {
 		t.cycles += 1 << 16
 	}
+	cycles := t.cycles
+	if t.lastSn < 0x0fff && (sn&0xffff) > 0xf000 {
+		// out-of-order with wrap back
+		if cycles < (1 << 16) {
+			// out-of-order at the start, for example got 0 followed by 65535
+			// in that example, sn 0 arrived ahead and should ideally have an extended SN of 65536,
+			// but do not record this out-of-order packet as sn 0 has already been recorded with
+			// extended SN of 0.
+			return
+		}
+		cycles -= 1 << 16
+	}
 	t.extInfo = append(t.extInfo, rtpExtInfo{
-		ExtTSN:    t.cycles | uint32(sn),
+		ExtTSN:    cycles | uint32(sn),
 		Timestamp: timeNS / 1e3,
 	})
 	if t.lastReport == 0 {
