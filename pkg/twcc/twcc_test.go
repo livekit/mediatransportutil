@@ -324,7 +324,6 @@ func TestTccPacket(t1 *testing.T) {
 	assert.NoError(t1, err)
 
 	assert.Equal(t1, hdr, ss.Header)
-
 }
 
 func BenchmarkBuildPacket(b *testing.B) {
@@ -355,4 +354,20 @@ func TestTccWithPacketLost(t *testing.T) {
 	}
 
 	assert.Greater(t, fbreceived, 0)
+}
+
+func TestTransportWideCC_packetOrder(t *testing.T) {
+	twcc := NewTransportWideCCResponder(123)
+
+	// cause a wrap and wrap back
+	now := time.Now()
+	twcc.Push(65533, now.UnixNano(), false)
+	twcc.Push(0, now.Add(time.Millisecond).UnixNano(), false)
+	twcc.Push(65534, now.Add(2*time.Millisecond).UnixNano(), false)
+	twcc.Push(65535, now.Add(3*time.Millisecond).UnixNano(), false)
+
+	assert.Equal(t, uint32(65533), twcc.extInfo[0].ExtTSN)
+	assert.Equal(t, uint32(65536), twcc.extInfo[1].ExtTSN)
+	assert.Equal(t, uint32(65534), twcc.extInfo[2].ExtTSN)
+	assert.Equal(t, uint32(65535), twcc.extInfo[3].ExtTSN)
 }

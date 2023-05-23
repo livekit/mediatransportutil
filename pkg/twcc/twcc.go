@@ -32,14 +32,15 @@ type rtpExtInfo struct {
 type Responder struct {
 	sync.Mutex
 
-	extInfo    []rtpExtInfo
-	lastReport int64
-	cycles     uint32
-	lastExtSN  uint32
-	pktCtn     uint8
-	lastSn     uint16
-	mSSRC      uint32
-	sSSRC      uint32
+	extInfo     []rtpExtInfo
+	lastReport  int64
+	cycles      uint32
+	lastExtSN   uint32
+	pktCtn      uint8
+	initialized bool
+	highestSN   uint16
+	mSSRC       uint32
+	sSSRC       uint32
 
 	len      uint16
 	deltaLen uint16
@@ -63,21 +64,41 @@ func (t *Responder) Push(sn uint16, timeNS int64, marker bool) {
 	t.Lock()
 	defer t.Unlock()
 
-	if sn < 0x0fff && (t.lastSn&0xffff) > 0xf000 {
-		t.cycles += 1 << 16
-	}
 	cycles := t.cycles
-	if t.lastSn < 0x0fff && (sn&0xffff) > 0xf000 {
-		// out-of-order with wrap back
-		if cycles < (1 << 16) {
-			// out-of-order at the start, for example got 0 followed by 65535
-			// in that example, sn 0 arrived ahead and should ideally have an extended SN of 65536,
-			// but do not record this out-of-order packet as sn 0 has already been recorded with
-			// extended SN of 0.
+	if !t.initialized {
+		t.highestSN = sn
+		t.initialized = true
+	} else {
+		diff := sn - t.highestSN
+		if diff == 0 {
+			// duplicate
 			return
 		}
-		cycles -= 1 << 16
+
+		if diff > (1 << 15) {
+			// out-of-order
+			if t.highestSN < sn {
+				// out-of-order with wrap back
+				if cycles < (1 << 16) {
+					// out-of-order at the start, for example got 0 followed by 65535
+					// in that example, sn 0 arrived ahead and should ideally have an extended SN of 65536,
+					// but do not record this out-of-order packet as sn 0 has already been recorded with
+					// extended SN of 0.
+					return
+				}
+				cycles -= 1 << 16
+			}
+		} else {
+			if sn < t.highestSN {
+				t.cycles += 1 << 16
+				cycles = t.cycles
+			}
+
+			// in-order
+			t.highestSN = sn
+		}
 	}
+
 	t.extInfo = append(t.extInfo, rtpExtInfo{
 		ExtTSN:    cycles | uint32(sn),
 		Timestamp: timeNS / 1e3,
@@ -85,7 +106,6 @@ func (t *Responder) Push(sn uint16, timeNS int64, marker bool) {
 	if t.lastReport == 0 {
 		t.lastReport = timeNS
 	}
-	t.lastSn = sn
 	delta := timeNS - t.lastReport
 	if len(t.extInfo) > 20 && t.mSSRC != 0 &&
 		(delta >= tccReportDelta || len(t.extInfo) > 100 || (marker && delta >= tccReportDeltaAfterMark)) {
