@@ -44,6 +44,10 @@ func (b *Bucket) Src() *[]byte {
 	return b.src
 }
 
+func (b *Bucket) HeadSequenceNumber() uint16 {
+	return b.headSN
+}
+
 func (b *Bucket) AddPacket(pkt []byte) ([]byte, error) {
 	sn := binary.BigEndian.Uint16(pkt[seqNumOffset : seqNumOffset+seqNumSize])
 	if !b.init {
