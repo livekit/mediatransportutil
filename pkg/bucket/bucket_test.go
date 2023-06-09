@@ -49,6 +49,7 @@ func Test_queue(t *testing.T) {
 		require.NoError(t, err)
 		require.NotPanics(t, func() {
 			_, _ = q.AddPacket(buf)
+			require.Equal(t, p.Header.SequenceNumber, q.HeadSequenceNumber())
 		})
 	}
 
