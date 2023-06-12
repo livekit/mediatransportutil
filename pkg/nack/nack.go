@@ -9,28 +9,56 @@ import (
 
 const (
 	defaultRtt    = 70                     // default RTT in ms
+	maxNacks      = 100                    // Max NACK sn the sfu will keep reference
 	maxTries      = 5                      // Max number of times a packet will be NACKed
-	cacheSize     = 100                    // Max NACK sn the sfu will keep reference
 	minInterval   = 20 * time.Millisecond  // minimum interval between NACK tries for the same sequence number
 	maxInterval   = 400 * time.Millisecond // maximum interval between NACK tries for the same sequence number
-	BackoffFactor = float64(1.25)
+	backoffFactor = float64(1.25)
 )
 
+type NackQueueParams struct {
+	DefaultRtt    uint32
+	MaxNacks      int
+	MaxTries      uint8
+	MinInterval   time.Duration
+	MaxInterval   time.Duration
+	BackoffFactor float64
+}
+
+var NackQueueParamsDefault = NackQueueParams{
+	DefaultRtt:    defaultRtt,
+	MaxNacks:      maxNacks,
+	MaxTries:      maxTries,
+	MinInterval:   minInterval,
+	MaxInterval:   maxInterval,
+	BackoffFactor: backoffFactor,
+}
+
 type NackQueue struct {
+	params     NackQueueParams
+	nackParams nackParams
+
 	nacks []*nack
 	rtt   uint32
 }
 
-func NewNACKQueue() *NackQueue {
+func NewNACKQueue(params NackQueueParams) *NackQueue {
 	return &NackQueue{
-		nacks: make([]*nack, 0, cacheSize),
-		rtt:   defaultRtt,
+		params: params,
+		nackParams: nackParams{
+			maxTries:      params.MaxTries,
+			minInterval:   params.MinInterval,
+			maxInterval:   params.MaxInterval,
+			backoffFactor: params.BackoffFactor,
+		},
+		nacks: make([]*nack, 0, params.MaxNacks),
+		rtt:   params.DefaultRtt,
 	}
 }
 
 func (n *NackQueue) SetRTT(rtt uint32) {
 	if rtt == 0 {
-		n.rtt = defaultRtt
+		n.rtt = n.params.DefaultRtt
 	} else {
 		n.rtt = rtt
 	}
@@ -55,7 +83,7 @@ func (n *NackQueue) Push(sn uint16) {
 		n.nacks = n.nacks[:len(n.nacks)-1]
 	}
 
-	n.nacks = append(n.nacks, newNack(sn))
+	n.nacks = append(n.nacks, newNack(&n.nackParams, sn))
 }
 
 func (n *NackQueue) Pairs() ([]rtcp.NackPair, int) {
@@ -117,14 +145,24 @@ func (n *NackQueue) Pairs() ([]rtcp.NackPair, int) {
 
 // -----------------------------------------------------------------
 
+type nackParams struct {
+	maxTries      uint8
+	minInterval   time.Duration
+	maxInterval   time.Duration
+	backoffFactor float64
+}
+
 type nack struct {
+	params *nackParams
+
 	seqNum       uint16
 	tries        uint8
 	lastNackedAt time.Time
 }
 
-func newNack(sn uint16) *nack {
+func newNack(params *nackParams, sn uint16) *nack {
 	return &nack{
+		params:       params,
 		seqNum:       sn,
 		tries:        0,
 		lastNackedAt: time.Now(),
@@ -133,7 +171,7 @@ func newNack(sn uint16) *nack {
 
 func (n *nack) getNack(now time.Time, rtt uint32) (shouldSend bool, shouldRemove bool, sn uint16) {
 	sn = n.seqNum
-	if n.tries >= maxTries {
+	if n.tries >= n.params.maxTries {
 		shouldRemove = true
 		return
 	}
@@ -141,18 +179,18 @@ func (n *nack) getNack(now time.Time, rtt uint32) (shouldSend bool, shouldRemove
 	var requiredInterval time.Duration
 	if n.tries > 0 {
 		// exponentially backoff retries, but cap maximum spacing between retries
-		requiredInterval = maxInterval
-		backoffInterval := time.Duration(float64(rtt)*math.Pow(BackoffFactor, float64(n.tries-1))) * time.Millisecond
+		requiredInterval = n.params.maxInterval
+		backoffInterval := time.Duration(float64(rtt)*math.Pow(n.params.backoffFactor, float64(n.tries-1))) * time.Millisecond
 		if backoffInterval < requiredInterval {
 			requiredInterval = backoffInterval
 		}
 	}
-	if requiredInterval < minInterval {
+	if requiredInterval < n.params.minInterval {
 		//
 		// Wait for some time for out-of-order packets before NACKing even if before NACKing first time.
 		// For subsequent tries, maintain minimum spacing.
 		//
-		requiredInterval = minInterval
+		requiredInterval = n.params.minInterval
 	}
 
 	if now.Sub(n.lastNackedAt) < requiredInterval {
