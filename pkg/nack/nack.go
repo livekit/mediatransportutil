@@ -35,7 +35,8 @@ var NackQueueParamsDefault = NackQueueParams{
 }
 
 type NackQueue struct {
-	params NackQueueParams
+	params     NackQueueParams
+	nackParams nackParams
 
 	nacks []*nack
 	rtt   uint32
@@ -44,8 +45,14 @@ type NackQueue struct {
 func NewNACKQueue(params NackQueueParams) *NackQueue {
 	return &NackQueue{
 		params: params,
-		nacks:  make([]*nack, 0, params.MaxNacks),
-		rtt:    params.DefaultRtt,
+		nackParams: nackParams{
+			maxTries:      params.MaxTries,
+			minInterval:   params.MinInterval,
+			maxInterval:   params.MaxInterval,
+			backoffFactor: params.BackoffFactor,
+		},
+		nacks: make([]*nack, 0, params.MaxNacks),
+		rtt:   params.DefaultRtt,
 	}
 }
 
@@ -76,12 +83,7 @@ func (n *NackQueue) Push(sn uint16) {
 		n.nacks = n.nacks[:len(n.nacks)-1]
 	}
 
-	n.nacks = append(n.nacks, newNack(nackParams{
-		maxTries:      n.params.MaxTries,
-		minInterval:   n.params.MinInterval,
-		maxInterval:   n.params.MaxInterval,
-		backoffFactor: n.params.BackoffFactor,
-	}, sn))
+	n.nacks = append(n.nacks, newNack(&n.nackParams, sn))
 }
 
 func (n *NackQueue) Pairs() ([]rtcp.NackPair, int) {
@@ -151,14 +153,14 @@ type nackParams struct {
 }
 
 type nack struct {
-	params nackParams
+	params *nackParams
 
 	seqNum       uint16
 	tries        uint8
 	lastNackedAt time.Time
 }
 
-func newNack(params nackParams, sn uint16) *nack {
+func newNack(params *nackParams, sn uint16) *nack {
 	return &nack{
 		params:       params,
 		seqNum:       sn,
