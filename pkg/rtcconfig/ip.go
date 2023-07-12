@@ -8,6 +8,7 @@ import (
 
 	"github.com/pion/stun"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slices"
 
 	"github.com/livekit/protocol/logger"
 )
@@ -32,14 +33,14 @@ func (conf *RTCConfig) determineIP() (string, error) {
 	}
 
 	// use local ip instead
-	addresses, err := GetLocalIPAddresses(false)
+	addresses, err := GetLocalIPAddresses(false, nil)
 	if len(addresses) > 0 {
 		return addresses[0], err
 	}
 	return "", err
 }
 
-func GetLocalIPAddresses(includeLoopback bool) ([]string, error) {
+func GetLocalIPAddresses(includeLoopback bool, preferredInterfaces []string) ([]string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -47,6 +48,10 @@ func GetLocalIPAddresses(includeLoopback bool) ([]string, error) {
 	loopBacks := make([]string, 0)
 	addresses := make([]string, 0)
 	for _, iface := range ifaces {
+		if len(preferredInterfaces) != 0 && !slices.Contains(preferredInterfaces, iface.Name) {
+			continue
+		}
+
 		addrs, err := iface.Addrs()
 		if err != nil {
 			continue
