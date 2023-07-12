@@ -10,10 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/logger/pionlogger"
 	"github.com/pion/ice/v2"
 	"github.com/pion/webrtc/v3"
+
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/logger/pionlogger"
 )
 
 type WebRTCConfig struct {
@@ -182,7 +183,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ipFilter func(net.IP) bool) ([]str
 	if len(stunServers) == 0 {
 		stunServers = DefaultStunServers
 	}
-	localIPs, err := GetLocalIPAddresses(rtcConf.EnableLoopbackCandidate)
+	localIPs, err := GetLocalIPAddresses(rtcConf.EnableLoopbackCandidate, nil)
 	if err != nil {
 		return nil, err
 	}
