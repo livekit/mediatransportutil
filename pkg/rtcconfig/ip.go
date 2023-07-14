@@ -201,5 +201,5 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr *net.UDPAddr) e
 	case <-ctx1.Done():
 		break
 	}
-	return fmt.Errorf("could not validate external IP")
+	return fmt.Errorf("could not validate external IP: %s", nodeIP)
 }
