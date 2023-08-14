@@ -290,10 +290,11 @@ done:
 	}
 
 	if rtcConf.ExternalIPOnly {
+		originFilter := ipFilter
 		ipFilter = func(ip net.IP) bool {
 			// don't filter out ipv6 address
 			if ip.To4() == nil {
-				return true
+				return originFilter == nil || originFilter(ip)
 			}
 
 			for _, mappedIP := range mappedIPs {
