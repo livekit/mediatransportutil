@@ -28,6 +28,8 @@ type RTCConfig struct {
 	IPs                     IPsConfig        `yaml:"ips,omitempty"`
 	EnableLoopbackCandidate bool             `yaml:"enable_loopback_candidate"`
 	UseMDNS                 bool             `yaml:"use_mdns,omitempty"`
+	// when UseExternalIP is true, only advertise the external IP to client
+	ExternalIPOnly bool `yaml:"external_ip_only,omitempty"`
 
 	// for testing, disable UDP
 	ForceTCP bool `yaml:"force_tcp,omitempty"`
