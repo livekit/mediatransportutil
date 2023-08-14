@@ -298,6 +298,7 @@ done:
 			}
 			return false
 		}
+		logger.Infow("use external ip only", "ips", mappedIPs)
 	}
 	return nat1to1IPs, ipFilter, nil
 }
