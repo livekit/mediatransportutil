@@ -291,6 +291,11 @@ done:
 
 	if rtcConf.ExternalIPOnly {
 		ipFilter = func(ip net.IP) bool {
+			// don't filter out ipv6 address
+			if ip.To4() == nil {
+				return true
+			}
+
 			for _, mappedIP := range mappedIPs {
 				if ip.Equal(net.ParseIP(mappedIP)) {
 					return true
@@ -298,7 +303,7 @@ done:
 			}
 			return false
 		}
-		logger.Infow("use ips mapped to external only", "ips", mappedIPs)
+		logger.Infow("use ips(v4) mapped to external only", "ips", mappedIPs)
 	}
 	return nat1to1IPs, ipFilter, nil
 }
