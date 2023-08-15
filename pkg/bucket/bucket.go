@@ -71,22 +71,20 @@ func (b *Bucket) AddPacket(pkt []byte) ([]byte, error) {
 	return b.push(sn, pkt)
 }
 
-func (b *Bucket) GetPacket(buf []byte, sn uint16) (i int, err error) {
-	p := b.get(sn)
-	if p == nil {
-		err = ErrPacketNotFound
-		return
+func (b *Bucket) GetPacket(buf []byte, sn uint16) (int, error) {
+	p, err := b.get(sn)
+	if err != nil {
+		return 0, err
 	}
-	i = len(p)
-	if cap(buf) < i {
-		err = ErrBufferTooSmall
-		return
+	n := len(p)
+	if cap(buf) < n {
+		return 0, ErrBufferTooSmall
 	}
-	if len(buf) < i {
-		buf = buf[:i]
+	if len(buf) < n {
+		buf = buf[:n]
 	}
 	copy(buf, p)
-	return
+	return n, nil
 }
 
 func (b *Bucket) push(sn uint16, pkt []byte) ([]byte, error) {
@@ -106,34 +104,39 @@ func (b *Bucket) push(sn uint16, pkt []byte) ([]byte, error) {
 	return storedPkt, nil
 }
 
-func (b *Bucket) get(sn uint16) []byte {
-	diff := b.headSN - sn
-	if int(diff) >= b.maxSteps {
-		// too old or asking for something ahead of headSN (which is effectively too old with wrap around)
-		return nil
+func (b *Bucket) get(sn uint16) ([]byte, error) {
+	diff := int(int16(b.headSN - sn))
+	if diff < 0 {
+		// asking for something ahead of headSN
+		return nil, fmt.Errorf("%w, headSN %d, sn %d", ErrPacketTooNew, b.headSN, sn)
+	}
+	if diff >= b.maxSteps {
+		// too old
+		return nil, fmt.Errorf("%w, headSN %d, sn %d", ErrPacketTooOld, b.headSN, sn)
 	}
 
-	off := b.offset(b.step - int(diff) - 1)
-	if binary.BigEndian.Uint16(b.buf[off+pktSizeHeader+seqNumOffset:off+pktSizeHeader+seqNumOffset+seqNumSize]) != sn {
-		return nil
+	off := b.offset(b.step - diff - 1)
+	cacheSN := binary.BigEndian.Uint16(b.buf[off+pktSizeHeader+seqNumOffset : off+pktSizeHeader+seqNumOffset+seqNumSize])
+	if cacheSN != sn {
+		return nil, fmt.Errorf("%w, headSN %d, sn %d, cacheSN %d", ErrPacketMismatch, b.headSN, sn, cacheSN)
 	}
 
 	sz := binary.BigEndian.Uint16(b.buf[off : off+pktSizeHeader])
 	if sz == invalidPktSize {
-		return nil
+		return nil, fmt.Errorf("%w, headSN %d, sn %d, size %d", ErrPacketSizeInvalid, b.headSN, sn, sz)
 	}
 
 	off += pktSizeHeader
-	return b.buf[off : off+int(sz)]
+	return b.buf[off : off+int(sz)], nil
 }
 
 func (b *Bucket) set(sn uint16, pkt []byte) ([]byte, error) {
-	diff := b.headSN - sn
-	if int(diff) >= b.maxSteps {
+	diff := int(b.headSN - sn)
+	if diff >= b.maxSteps {
 		return nil, fmt.Errorf("%w, headSN %d, sn %d", ErrPacketTooOld, b.headSN, sn)
 	}
 
-	off := b.offset(b.step - int(diff) - 1)
+	off := b.offset(b.step - diff - 1)
 
 	// Do not overwrite if duplicate
 	if binary.BigEndian.Uint16(b.buf[off+pktSizeHeader+seqNumOffset:off+pktSizeHeader+seqNumOffset+seqNumSize]) == sn {
