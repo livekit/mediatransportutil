@@ -137,7 +137,6 @@ func (b *Bucket) set(sn uint16, pkt []byte) ([]byte, error) {
 	}
 
 	off := b.offset(b.step - diff - 1)
-	fmt.Printf("off: %d, step: %d, diff: %d, %d\n", off, b.step, diff, int(diff)) // REMOVE
 
 	// Do not overwrite if duplicate
 	if binary.BigEndian.Uint16(b.buf[off+pktSizeHeader+seqNumOffset:off+pktSizeHeader+seqNumOffset+seqNumSize]) == sn {
