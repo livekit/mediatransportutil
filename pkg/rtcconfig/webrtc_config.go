@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -108,7 +109,11 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			if rtcConf.BatchIO.BatchSize > 0 {
 				opts = append(opts, ice.UDPMuxFromPortWithBatchWrite(rtcConf.BatchIO.BatchSize, rtcConf.BatchIO.MaxFlushInterval))
 			}
-			udpMux, err := ice.NewMultiUDPMuxFromPort(int(rtcConf.UDPPort), opts...)
+			var ports []int
+			for i := 0; i < runtime.NumCPU(); i++ {
+				ports = append(ports, int(rtcConf.UDPPort)+i)
+			}
+			udpMux, err := ice.NewMultiUDPMuxFromPorts(ports, opts...)
 			if err != nil {
 				return nil, err
 			}

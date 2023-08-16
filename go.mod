@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/gammazero/deque v0.2.1
 	github.com/livekit/protocol v1.5.10
-	github.com/pion/ice/v2 v2.3.10-0.20230815124513-ce9ec53ce6fa
+	github.com/pion/ice/v2 v2.3.10-0.20230816044804-d8026b9c9ad8
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.7.13
 	github.com/pion/stun v0.6.1
