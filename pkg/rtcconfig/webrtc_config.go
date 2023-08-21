@@ -95,7 +95,6 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 				ice.UDPMuxFromPortWithReadBufferSize(defaultUDPBufferSize),
 				ice.UDPMuxFromPortWithWriteBufferSize(defaultUDPBufferSize),
 				ice.UDPMuxFromPortWithLogger(s.LoggerFactory.NewLogger("udp_mux")),
-				ice.UDPMuxFromPortWithBatchWrite(512, 10*time.Millisecond),
 			}
 			if rtcConf.EnableLoopbackCandidate {
 				opts = append(opts, ice.UDPMuxFromPortWithLoopback())
