@@ -56,6 +56,8 @@ github.com/pion/ice/v2 v2.3.10-0.20230815124513-ce9ec53ce6fa h1:Kb5YzICd3jCLqVnA
 github.com/pion/ice/v2 v2.3.10-0.20230815124513-ce9ec53ce6fa/go.mod h1:hHGCibDfmXGqukayQw979xEctASp2Pe5Oe0iDU8pRus=
 github.com/pion/ice/v2 v2.3.10-0.20230816044804-d8026b9c9ad8 h1:lVwVVAL+nkKui3TQKUAEFCeEgGRFZ0SsEw/2vkvTfsA=
 github.com/pion/ice/v2 v2.3.10-0.20230816044804-d8026b9c9ad8/go.mod h1:hHGCibDfmXGqukayQw979xEctASp2Pe5Oe0iDU8pRus=
+github.com/pion/ice/v2 v2.3.10-0.20230821033325-a290e28e4f14 h1:zqtjCmSZP6LT0LluvbNNb3SpfExx8lLS1AfYJy7wTvE=
+github.com/pion/ice/v2 v2.3.10-0.20230821033325-a290e28e4f14/go.mod h1:RoYdOADSHISND+9b9hsl094hENjGDF1U3ATzUeiMq/A=
 github.com/pion/interceptor v0.1.17 h1:prJtgwFh/gB8zMqGZoOgJPHivOwVAp61i2aG61Du/1w=
 github.com/pion/interceptor v0.1.17/go.mod h1:SY8kpmfVBvrbUzvj2bsXz7OJt5JvmVNZ+4Kjq7FcwrI=
 github.com/pion/logging v0.2.2 h1:M9+AIj/+pxNsDfAT64+MAVgJO0rsyLnoJKCqf//DoeY=
