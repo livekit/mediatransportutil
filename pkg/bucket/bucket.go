@@ -48,8 +48,7 @@ func (b *Bucket) HeadSequenceNumber() uint16 {
 	return b.headSN
 }
 
-func (b *Bucket) AddPacket(pkt []byte) ([]byte, error) {
-	sn := binary.BigEndian.Uint16(pkt[seqNumOffset : seqNumOffset+seqNumSize])
+func (b *Bucket) addPacket(pkt []byte, sn uint16) ([]byte, error) {
 	if !b.init {
 		b.headSN = sn - 1
 		b.init = true
@@ -69,6 +68,21 @@ func (b *Bucket) AddPacket(pkt []byte) ([]byte, error) {
 	}
 
 	return b.push(sn, pkt)
+}
+
+func (b *Bucket) AddPacket(pkt []byte) ([]byte, error) {
+	return b.addPacket(pkt, binary.BigEndian.Uint16(pkt[seqNumOffset:seqNumOffset+seqNumSize]))
+}
+
+func (b *Bucket) AddPacketWithSequenceNumber(pkt []byte, sn uint16) ([]byte, error) {
+	storedPkt, err := b.addPacket(pkt, sn)
+	if err != nil {
+		return nil, err
+	}
+
+	// overwrite sequence number in packet
+	binary.BigEndian.PutUint16(storedPkt[seqNumOffset:seqNumOffset+seqNumSize], sn)
+	return storedPkt, nil
 }
 
 func (b *Bucket) GetPacket(buf []byte, sn uint16) (int, error) {

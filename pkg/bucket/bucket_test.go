@@ -79,6 +79,7 @@ func Test_queue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedSN, np.SequenceNumber)
 
+	// adding a duplicate should not add and return retransmitted packet error
 	_, err = q.AddPacket(buf)
 	require.ErrorIs(t, err, ErrRTXPacket)
 
@@ -112,6 +113,27 @@ func Test_queue(t *testing.T) {
 
 	// getting a packet added after resync should succeed
 	expectedSN = TestPackets[1].Header.SequenceNumber
+	i, err = q.GetPacket(buff, expectedSN)
+	require.NoError(t, err)
+	err = np.Unmarshal(buff[:i])
+	require.NoError(t, err)
+	require.Equal(t, expectedSN, np.SequenceNumber)
+
+	// adding a packet with sequence number override
+	buf, err = TestPackets[2].Marshal()
+	require.NoError(t, err)
+	// sequence number in packet is 4, add with 5
+	_, err = q.AddPacketWithSequenceNumber(buf, 5)
+	require.NoError(t, err)
+
+	// should not be able to get sequence number 4 that was in the packet that was given to the bucket
+	// it should have been overwritten
+	expectedSN = TestPackets[2].Header.SequenceNumber
+	i, err = q.GetPacket(buff, expectedSN)
+	require.ErrorIs(t, err, ErrPacketMismatch)
+
+	// should be able to get overridden sequence number
+	expectedSN = 5
 	i, err = q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
