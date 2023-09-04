@@ -79,16 +79,17 @@ func Test_queue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expectedSN, np.SequenceNumber)
 
+	// adding a duplicate should not add and return retransmitted packet error
 	_, err = q.AddPacket(buf)
 	require.ErrorIs(t, err, ErrRTXPacket)
 
 	// try to get old packets
 	_, err = q.GetPacket(buff, 0)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 
 	// ask for something ahead of headSN
 	_, err = q.GetPacket(buff, 11)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooNew)
 
 	q.ResyncOnNextPacket()
 
@@ -106,12 +107,33 @@ func Test_queue(t *testing.T) {
 	_, err = q.AddPacket(buf)
 	require.NoError(t, err)
 
-	// try to get a valid packet before resync, should not be found
+	// try to get a packet that was valid before resync, should not be found
 	_, err = q.GetPacket(buff, 8)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooNew)
 
 	// getting a packet added after resync should succeed
 	expectedSN = TestPackets[1].Header.SequenceNumber
+	i, err = q.GetPacket(buff, expectedSN)
+	require.NoError(t, err)
+	err = np.Unmarshal(buff[:i])
+	require.NoError(t, err)
+	require.Equal(t, expectedSN, np.SequenceNumber)
+
+	// adding a packet with sequence number override
+	buf, err = TestPackets[2].Marshal()
+	require.NoError(t, err)
+	// sequence number in packet is 4, add with 5
+	_, err = q.AddPacketWithSequenceNumber(buf, 5)
+	require.NoError(t, err)
+
+	// should not be able to get sequence number 4 that was in the packet that was given to the bucket
+	// it should have been overwritten
+	expectedSN = TestPackets[2].Header.SequenceNumber
+	i, err = q.GetPacket(buff, expectedSN)
+	require.ErrorIs(t, err, ErrPacketMismatch)
+
+	// should be able to get overridden sequence number
+	expectedSN = 5
 	i, err = q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
@@ -235,11 +257,11 @@ func Test_queue_wrap(t *testing.T) {
 
 	// try to get old packets, but were valid before the bucket wrapped
 	_, err := q.GetPacket(buff, 1)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 3)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 4)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 
 	expectedSN := uint16(6)
 	np := rtp.Packet{}
@@ -285,15 +307,15 @@ func Test_queue_wrap(t *testing.T) {
 
 	// after the large jump invalidating all slots, retrieving previously added packets should fail
 	_, err = q.GetPacket(buff, 6)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 7)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 8)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 10)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 13)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 15)
-	require.ErrorIs(t, err, ErrPacketNotFound)
+	require.ErrorIs(t, err, ErrPacketTooOld)
 }
