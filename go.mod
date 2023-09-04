@@ -3,12 +3,12 @@ module github.com/livekit/mediatransportutil
 go 1.18
 
 require (
-	github.com/gammazero/deque v0.2.1
 	github.com/livekit/protocol v1.5.10
 	github.com/pion/ice/v2 v2.3.11
+	github.com/pion/interceptor v0.1.18
 	github.com/pion/logging v0.2.2
 	github.com/pion/rtcp v1.2.10
-	github.com/pion/rtp v1.7.13
+	github.com/pion/rtp v1.8.1
 	github.com/pion/stun v0.6.1
 	github.com/pion/transport/v2 v2.2.3
 	github.com/pion/webrtc/v3 v3.2.11
@@ -25,7 +25,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
 	github.com/pion/dtls/v2 v2.2.7 // indirect
-	github.com/pion/interceptor v0.1.17 // indirect
 	github.com/pion/mdns v0.0.8 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/sctp v1.8.7 // indirect
@@ -39,6 +38,6 @@ require (
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.12.0 // indirect
 	golang.org/x/net v0.14.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 )
