@@ -14,6 +14,7 @@ import (
 	"github.com/pion/ice/v2"
 	"github.com/pion/webrtc/v3"
 
+	"github.com/livekit/mediatransportutil/pkg/transport"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/logger/pionlogger"
 )
@@ -90,32 +91,42 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			if err := s.SetEphemeralUDPPortRange(uint16(rtcConf.ICEPortRangeStart), uint16(rtcConf.ICEPortRangeEnd)); err != nil {
 				return nil, err
 			}
-		} else if rtcConf.UDPPort != 0 {
-			opts := []ice.UDPMuxFromPortOption{
-				ice.UDPMuxFromPortWithReadBufferSize(defaultUDPBufferSize),
-				ice.UDPMuxFromPortWithWriteBufferSize(defaultUDPBufferSize),
-				ice.UDPMuxFromPortWithLogger(s.LoggerFactory.NewLogger("udp_mux")),
+		} else if rtcConf.UDPPort != 0 || rtcConf.UDPPorts.Valid() {
+			opts := []transport.UDPMuxFromPortOption{
+				transport.UDPMuxFromPortWithReadBufferSize(defaultUDPBufferSize),
+				transport.UDPMuxFromPortWithWriteBufferSize(defaultUDPBufferSize),
+				transport.UDPMuxFromPortWithLogger(s.LoggerFactory.NewLogger("udp_mux")),
 			}
 			if rtcConf.EnableLoopbackCandidate {
-				opts = append(opts, ice.UDPMuxFromPortWithLoopback())
+				opts = append(opts, transport.UDPMuxFromPortWithLoopback())
 			}
 			if ipFilter != nil {
-				opts = append(opts, ice.UDPMuxFromPortWithIPFilter(ipFilter))
+				opts = append(opts, transport.UDPMuxFromPortWithIPFilter(ipFilter))
 			}
 			if ifFilter != nil {
-				opts = append(opts, ice.UDPMuxFromPortWithInterfaceFilter(ifFilter))
+				opts = append(opts, transport.UDPMuxFromPortWithInterfaceFilter(ifFilter))
 			}
 			if rtcConf.BatchIO.BatchSize > 0 {
-				opts = append(opts, ice.UDPMuxFromPortWithBatchWrite(rtcConf.BatchIO.BatchSize, rtcConf.BatchIO.MaxFlushInterval))
+				opts = append(opts, transport.UDPMuxFromPortWithBatchWrite(rtcConf.BatchIO.BatchSize, rtcConf.BatchIO.MaxFlushInterval))
 			}
-			var ports []int
-			for i := 0; i < runtime.NumCPU(); i++ {
-				ports = append(ports, int(rtcConf.UDPPort)+i)
+			var availablePorts []int
+			if rtcConf.UDPPorts.Valid() {
+				availablePorts = rtcConf.UDPPorts.ToSlice()
+			} else {
+				availablePorts = append(availablePorts, int(rtcConf.UDPPort))
 			}
-			udpMux, err := ice.NewMultiUDPMuxFromPorts(ports, opts...)
+
+			ports := make([]int, 0, len(availablePorts))
+			for i := 0; i < runtime.NumCPU() && i < len(availablePorts); i++ {
+				ports = append(ports, availablePorts[i])
+			}
+
+			muxes, err := transport.CreateUDPMuxesFromPorts(ports, opts...)
 			if err != nil {
 				return nil, err
 			}
+
+			udpMux = transport.NewMultiPortsUDPMux(muxes...)
 
 			s.SetICEUDPMux(udpMux)
 			if !development {
