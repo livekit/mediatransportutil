@@ -24,8 +24,7 @@ var DefaultStunServers = []string{
 }
 
 type RTCConfig struct {
-	UDPPort                 uint32           `yaml:"udp_port,omitempty"`
-	UDPPorts                PortRange        `yaml:"udp_ports,omitempty"`
+	UDPPort                 PortRange        `yaml:"udp_port,omitempty"`
 	TCPPort                 uint32           `yaml:"tcp_port,omitempty"`
 	ICEPortRangeStart       uint32           `yaml:"port_range_start,omitempty"`
 	ICEPortRangeEnd         uint32           `yaml:"port_range_end,omitempty"`
@@ -63,10 +62,10 @@ type BatchIOConfig struct {
 
 func (conf *RTCConfig) Validate(development bool) error {
 	// set defaults for ports if none are set
-	if conf.UDPPort == 0 && !conf.UDPPorts.Valid() && conf.ICEPortRangeStart == 0 {
+	if !conf.UDPPort.Valid() && conf.ICEPortRangeStart == 0 {
 		// to make it easier to run in dev mode/docker, default to single port
 		if development {
-			conf.UDPPort = 7882
+			conf.UDPPort = PortRange{Start: 7882}
 		} else {
 			conf.ICEPortRangeStart = 50000
 			conf.ICEPortRangeEnd = 60000
