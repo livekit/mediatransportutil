@@ -63,7 +63,7 @@ type BatchIOConfig struct {
 
 func (conf *RTCConfig) Validate(development bool) error {
 	// set defaults for ports if none are set
-	if conf.UDPPort == 0 && conf.ICEPortRangeStart == 0 {
+	if conf.UDPPort == 0 && !conf.UDPPorts.Valid() && conf.ICEPortRangeStart == 0 {
 		// to make it easier to run in dev mode/docker, default to single port
 		if development {
 			conf.UDPPort = 7882
