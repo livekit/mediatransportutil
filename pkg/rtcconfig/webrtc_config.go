@@ -91,7 +91,7 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			if err := s.SetEphemeralUDPPortRange(uint16(rtcConf.ICEPortRangeStart), uint16(rtcConf.ICEPortRangeEnd)); err != nil {
 				return nil, err
 			}
-		} else if rtcConf.UDPPort != 0 || rtcConf.UDPPorts.Valid() {
+		} else if rtcConf.UDPPort.Valid() {
 			opts := []transport.UDPMuxFromPortOption{
 				transport.UDPMuxFromPortWithReadBufferSize(defaultUDPBufferSize),
 				transport.UDPMuxFromPortWithWriteBufferSize(defaultUDPBufferSize),
@@ -109,12 +109,7 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			if rtcConf.BatchIO.BatchSize > 0 {
 				opts = append(opts, transport.UDPMuxFromPortWithBatchWrite(rtcConf.BatchIO.BatchSize, rtcConf.BatchIO.MaxFlushInterval))
 			}
-			var availablePorts []int
-			if rtcConf.UDPPorts.Valid() {
-				availablePorts = rtcConf.UDPPorts.ToSlice()
-			} else {
-				availablePorts = append(availablePorts, int(rtcConf.UDPPort))
-			}
+			availablePorts := rtcConf.UDPPort.ToSlice()
 
 			ports := make([]int, 0, len(availablePorts))
 			for i := 0; i < runtime.NumCPU() && i < len(availablePorts); i++ {
@@ -220,8 +215,8 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ipFilter func(net.IP) bool) ([]str
 		for i := 0; i < 5; i++ {
 			udpPorts = append(udpPorts, rand.Intn(int(portRangeEnd-portRangeStart))+int(portRangeStart))
 		}
-	} else if rtcConf.UDPPort != 0 {
-		udpPorts = append(udpPorts, int(rtcConf.UDPPort))
+	} else if rtcConf.UDPPort.Valid() {
+		udpPorts = append(udpPorts, rtcConf.UDPPort.Start)
 	} else {
 		udpPorts = append(udpPorts, 0)
 	}
