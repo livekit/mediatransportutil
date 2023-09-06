@@ -101,13 +101,17 @@ func (r PortRange) MarshalYAML() (interface{}, error) {
 }
 
 func (r *PortRange) UnmarshalYAML(value *yaml.Node) error {
-	if value.Value == "" {
+	return r.UnmarshalString(value.Value)
+}
+
+func (r *PortRange) UnmarshalString(str string) error {
+	if str == "" {
 		return nil
 	}
-	if strings.Contains(value.Value, "-") {
-		parts := strings.Split(value.Value, "-")
+	if strings.Contains(str, "-") {
+		parts := strings.Split(str, "-")
 		if len(parts) != 2 {
-			return fmt.Errorf("invalid port range %s, should be <start>-<end>", value.Value)
+			return fmt.Errorf("invalid port range %s, should be <start>-<end>", str)
 		}
 		start, err := strconv.Atoi(strings.Trim(parts[0], " "))
 		if err != nil {
@@ -126,9 +130,9 @@ func (r *PortRange) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 
-	port, err := strconv.Atoi(value.Value)
+	port, err := strconv.Atoi(str)
 	if err != nil {
-		return fmt.Errorf("invalid port %s: %v", value.Value, err)
+		return fmt.Errorf("invalid port %s: %v", str, err)
 	}
 	r.Start = port
 	return nil
