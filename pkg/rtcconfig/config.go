@@ -85,8 +85,8 @@ func (conf *RTCConfig) Validate(development bool) error {
 }
 
 type PortRange struct {
-	Start int
-	End   int
+	Start int `yaml:"start,omitempty"`
+	End   int `yaml:"end,omitempty"`
 }
 
 func (r PortRange) MarshalYAML() (interface{}, error) {
