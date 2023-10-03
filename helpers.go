@@ -79,19 +79,31 @@ func getRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 	// RTT calculation reference: https://datatracker.ietf.org/doc/html/rfc3550#section-6.4.1
 
 	// middle 32-bits of current NTP time
-	var nowNTP uint32
+	now := time.Now()
 	timeSinceLastSR := time.Duration(0)
 	if !ignoreLast {
 		timeSinceLastSR = time.Since(lastSentAt)
-		nowNTP = uint32(ToNtpTime(lastSRNTP.Time().Add(timeSinceLastSR)) >> 16)
-	} else {
-		nowNTP = uint32(ToNtpTime(time.Now()) >> 16)
+		now = lastSRNTP.Time().Add(timeSinceLastSR)
 	}
-	if nowNTP < (report.LastSenderReport + report.Delay) {
-		return 0, fmt.Errorf("%w, nowNTP: %d, lsr: %d, delay: %d, lastSentAt: %+v, since: %+v", ErrRttAnachronousSenderReport, nowNTP, report.LastSenderReport, report.Delay, lastSentAt, timeSinceLastSR)
+	nowNTP := ToNtpTime(now)
+	nowNTP32 := uint32(nowNTP >> 16)
+	if (nowNTP32 - report.LastSenderReport - report.Delay) > (1 << 31) {
+		return 0, fmt.Errorf(
+			"%w, lastSRNTP: %d / %+v, lastSentAt: %+v, since: %+v, now: %+v, nowNTP: %d, lsr: %d, dlsr: %d, diff: %d",
+			ErrRttAnachronousSenderReport,
+			lastSRNTP,
+			lastSRNTP.Time().String(),
+			lastSentAt,
+			timeSinceLastSR,
+			now.String(),
+			nowNTP,
+			report.LastSenderReport,
+			report.Delay,
+			nowNTP32-report.LastSenderReport-report.Delay,
+		)
 	}
 
-	ntpDiff := nowNTP - report.LastSenderReport - report.Delay
+	ntpDiff := nowNTP32 - report.LastSenderReport - report.Delay
 	return uint32(math.Ceil(float64(ntpDiff) * 1000.0 / 65536.0)), nil
 }
 
