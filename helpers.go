@@ -89,7 +89,7 @@ func getRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 	nowNTP32 := uint32(nowNTP >> 16)
 	if (nowNTP32 - report.LastSenderReport - report.Delay) > (1 << 31) {
 		return 0, fmt.Errorf(
-			"%w, lastSRNTP: %d / %+v, lastSentAt: %+v, since: %+v, now: %+v, nowNTP: %d, lsr: %d, dlsr: %d, diff: %d",
+			"%w, lastSRNTP: %d / %+v, lastSentAt: %+v, since: %+v, now: %+v, nowNTP: %d, lsr: %d, dlsr: %d / %+v, diff: %d",
 			ErrRttAnachronousSenderReport,
 			lastSRNTP,
 			lastSRNTP.Time().String(),
@@ -99,7 +99,8 @@ func getRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 			nowNTP,
 			report.LastSenderReport,
 			report.Delay,
-			nowNTP32-report.LastSenderReport-report.Delay,
+			time.Duration(float64(report.Delay)/65536.*float64(time.Second)),
+			int32(nowNTP32-report.LastSenderReport-report.Delay),
 		)
 	}
 
