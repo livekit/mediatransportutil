@@ -28,6 +28,7 @@ const (
 	minInterval   = 20 * time.Millisecond  // minimum interval between NACK tries for the same sequence number
 	maxInterval   = 400 * time.Millisecond // maximum interval between NACK tries for the same sequence number
 	backoffFactor = float64(1.25)
+	maxLifetime   = 2 * time.Minute
 )
 
 type NackQueueParams struct {
@@ -37,6 +38,7 @@ type NackQueueParams struct {
 	MinInterval   time.Duration
 	MaxInterval   time.Duration
 	BackoffFactor float64
+	MaxLifetime   time.Duration
 }
 
 var NackQueueParamsDefault = NackQueueParams{
@@ -46,6 +48,7 @@ var NackQueueParamsDefault = NackQueueParams{
 	MinInterval:   minInterval,
 	MaxInterval:   maxInterval,
 	BackoffFactor: backoffFactor,
+	MaxLifetime:   maxLifetime,
 }
 
 type NackQueue struct {
@@ -64,6 +67,7 @@ func NewNACKQueue(params NackQueueParams) *NackQueue {
 			minInterval:   params.MinInterval,
 			maxInterval:   params.MaxInterval,
 			backoffFactor: params.BackoffFactor,
+			maxLifeTime:   params.MaxLifetime,
 		},
 		nacks: make([]*nack, 0, params.MaxNacks),
 		rtt:   params.DefaultRtt,
@@ -164,28 +168,32 @@ type nackParams struct {
 	minInterval   time.Duration
 	maxInterval   time.Duration
 	backoffFactor float64
+	maxLifeTime   time.Duration
 }
 
 type nack struct {
 	params *nackParams
 
 	seqNum       uint16
+	bornAt       time.Time
 	tries        uint8
 	lastNackedAt time.Time
 }
 
 func newNack(params *nackParams, sn uint16) *nack {
+	now := time.Now()
 	return &nack{
 		params:       params,
 		seqNum:       sn,
+		bornAt:       now,
 		tries:        0,
-		lastNackedAt: time.Now(),
+		lastNackedAt: now,
 	}
 }
 
 func (n *nack) getNack(now time.Time, rtt uint32) (shouldSend bool, shouldRemove bool, sn uint16) {
 	sn = n.seqNum
-	if n.tries >= n.params.maxTries {
+	if n.tries >= n.params.maxTries || time.Since(n.bornAt) > n.params.maxLifeTime {
 		shouldRemove = true
 		return
 	}
