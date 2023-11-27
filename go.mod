@@ -20,6 +20,7 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/gammazero/deque v0.2.1
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/google/uuid v1.3.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
