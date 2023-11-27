@@ -34,7 +34,7 @@ type Packet struct {
 	Payload            []byte
 	AbsSendTimeExtID   uint8
 	TransportWideExtID uint8
-	writer             RTPWriter
+	Writer             RTPWriter
 	Pool               *sync.Pool
 	PoolEntity         *[]byte
 
