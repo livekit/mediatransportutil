@@ -82,25 +82,21 @@ func (b *Base) writeRTPHeaderExtensions(p *Packet) (time.Time, error) {
 		p.Header.SetExtension(ext.ID, ext.Payload)
 	}
 
-	if b.packetTime != nil {
-		sendingAt := b.packetTime.Get()
-		if p.AbsSendTimeExtID != 0 {
-			sendTime := rtp.NewAbsSendTimeExtension(sendingAt)
-			b, err := sendTime.Marshal()
-			if err != nil {
-				return time.Time{}, err
-			}
-
-			err = p.Header.SetExtension(p.AbsSendTimeExtID, b)
-			if err != nil {
-				return time.Time{}, err
-			}
+	sendingAt := b.packetTime.Get()
+	if p.AbsSendTimeExtID != 0 {
+		sendTime := rtp.NewAbsSendTimeExtension(sendingAt)
+		b, err := sendTime.Marshal()
+		if err != nil {
+			return time.Time{}, err
 		}
 
-		return sendingAt, nil
+		err = p.Header.SetExtension(p.AbsSendTimeExtID, b)
+		if err != nil {
+			return time.Time{}, err
+		}
 	}
 
-	return time.Time{}, nil
+	return sendingAt, nil
 }
 
 // ------------------------------------------------

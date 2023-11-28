@@ -43,6 +43,7 @@ type PacerLeakyBucket struct {
 
 func NewPacerLeakyBucket(interval time.Duration, bitrate int, maxLatency time.Duration, logger logger.Logger) *PacerLeakyBucket {
 	p := &PacerLeakyBucket{
+		Base:       NewBase(logger),
 		interval:   interval,
 		bitrate:    bitrate,
 		maxLatency: maxLatency,
