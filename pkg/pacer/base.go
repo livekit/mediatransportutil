@@ -69,11 +69,6 @@ func (b *Base) SendPacket(p *Packet) (int, error) {
 
 // writes RTP header extensions of track
 func (b *Base) writeRTPHeaderExtensions(p *Packet) (time.Time, error) {
-	// clear out extensions that may have been in the forwarded header
-	p.Header.Extension = false
-	p.Header.ExtensionProfile = 0
-	p.Header.Extensions = []rtp.Extension{}
-
 	for _, ext := range p.Extensions {
 		if ext.ID == 0 || len(ext.Payload) == 0 {
 			continue
