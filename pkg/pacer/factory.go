@@ -31,6 +31,12 @@ var defaultPacerParams = pacerFactorParams{
 
 type PacketFactoryOpt func(params *pacerFactorParams)
 
+func WithSendInterval(sendInterval time.Duration) PacketFactoryOpt {
+	return func(params *pacerFactorParams) {
+		params.SendInterval = sendInterval
+	}
+}
+
 func WithBitrate(bitrate int) PacketFactoryOpt {
 	return func(params *pacerFactorParams) {
 		params.Bitrate = bitrate
