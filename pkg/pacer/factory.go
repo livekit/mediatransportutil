@@ -15,7 +15,7 @@ const (
 	LeakyBucketPacer
 )
 
-type pacerFactorParams struct {
+type pacerFactoryParams struct {
 	SendInterval time.Duration
 	Bitrate      int
 	MaxLatency   time.Duration
@@ -23,43 +23,43 @@ type pacerFactorParams struct {
 	Logger       logger.Logger
 }
 
-var defaultPacerParams = pacerFactorParams{
+var defaultPacerParams = pacerFactoryParams{
 	SendInterval: 5 * time.Millisecond,
 	Bitrate:      5000000,
 	MaxLatency:   2 * time.Second,
 }
 
-type PacketFactoryOpt func(params *pacerFactorParams)
+type PacerFactoryOpt func(params *pacerFactoryParams)
 
-func WithSendInterval(sendInterval time.Duration) PacketFactoryOpt {
-	return func(params *pacerFactorParams) {
+func WithSendInterval(sendInterval time.Duration) PacerFactoryOpt {
+	return func(params *pacerFactoryParams) {
 		params.SendInterval = sendInterval
 	}
 }
 
-func WithBitrate(bitrate int) PacketFactoryOpt {
-	return func(params *pacerFactorParams) {
+func WithBitrate(bitrate int) PacerFactoryOpt {
+	return func(params *pacerFactoryParams) {
 		params.Bitrate = bitrate
 	}
 }
 
-func WithMaxLatency(maxLatency time.Duration) PacketFactoryOpt {
-	return func(params *pacerFactorParams) {
+func WithMaxLatency(maxLatency time.Duration) PacerFactoryOpt {
+	return func(params *pacerFactoryParams) {
 		params.MaxLatency = maxLatency
 	}
 }
 
-func Withlogger(logger logger.Logger) PacketFactoryOpt {
-	return func(params *pacerFactorParams) {
+func Withlogger(logger logger.Logger) PacerFactoryOpt {
+	return func(params *pacerFactoryParams) {
 		params.Logger = logger
 	}
 }
 
 type PacerFactory struct {
-	params *pacerFactorParams
+	params *pacerFactoryParams
 }
 
-func NewPacerFactory(pacerType PacerType, opts ...PacketFactoryOpt) Factory {
+func NewPacerFactory(pacerType PacerType, opts ...PacerFactoryOpt) Factory {
 	params := defaultPacerParams
 	params.PacerType = pacerType
 	params.Logger = logger.GetLogger()
