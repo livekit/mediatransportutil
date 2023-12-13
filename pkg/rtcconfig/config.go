@@ -21,8 +21,6 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/livekit/protocol/logger"
 )
 
 const (
@@ -89,9 +87,8 @@ func (conf *RTCConfig) Validate(development bool) error {
 	}
 
 	var err error
-	if conf.NodeIP == "" {
+	if conf.NodeIP == "" || conf.UseExternalIP {
 		conf.NodeIP, err = conf.determineIP()
-		logger.Infow("node ip determined", "nodeIP", conf.NodeIP)
 		if err != nil {
 			return err
 		}
