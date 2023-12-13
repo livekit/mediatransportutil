@@ -87,7 +87,7 @@ func (conf *RTCConfig) Validate(development bool) error {
 	}
 
 	var err error
-	if conf.NodeIP == "" {
+	if conf.NodeIP == "" || conf.UseExternalIP {
 		conf.NodeIP, err = conf.determineIP()
 		if err != nil {
 			return err
