@@ -159,6 +159,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 			return nodeIP, nil
 		}
 		_ = c.Close()
+		logger.Infow("resolved external ip", "externalIP", nodeIP, "localAddr", localAddr, "chosenLocalAddr", conn.LocalAddr())
 		return nodeIP, validateExternalIP(ctx1, nodeIP, localAddr.(*net.UDPAddr))
 	case <-ctx1.Done():
 		msg := "could not determine public IP"
