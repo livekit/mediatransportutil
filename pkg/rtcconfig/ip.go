@@ -158,6 +158,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 		if localAddr == nil {
 			return nodeIP, nil
 		}
+		logger.Infow("resolved external ip", "externalIP", nodeIP, "localAddr", localAddr, "chosenLocalAddr", conn.LocalAddr())
 		_ = c.Close()
 		return nodeIP, validateExternalIP(ctx1, nodeIP, localAddr.(*net.UDPAddr))
 	case <-ctx1.Done():
