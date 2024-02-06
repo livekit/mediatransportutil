@@ -62,6 +62,10 @@ func (b *Bucket) HeadSequenceNumber() uint16 {
 	return b.headSN
 }
 
+func (b *Bucket) Capacity() int {
+	return b.maxSteps
+}
+
 func (b *Bucket) addPacket(pkt []byte, sn uint16) ([]byte, error) {
 	if !b.init {
 		b.headSN = sn - 1
