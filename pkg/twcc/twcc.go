@@ -31,7 +31,6 @@ const (
 type Responder struct {
 	sync.Mutex
 
-	mSSRC      uint32
 	sSSRC      uint32
 	lastReport int64
 	recorder   *piontwcc.Recorder
@@ -39,25 +38,24 @@ type Responder struct {
 	onFeedback func(packet []rtcp.Packet)
 }
 
-func NewTransportWideCCResponder(mSSRC uint32) *Responder {
+func NewTransportWideCCResponder() *Responder {
 	sSSRC := rand.Uint32()
 	recorder := piontwcc.NewRecorder(sSSRC)
 	return &Responder{
 		sSSRC:    sSSRC,
-		mSSRC:    mSSRC,
 		recorder: recorder,
 	}
 }
 
 // Push a sequence number read from rtp packet ext packet
-func (t *Responder) Push(sn uint16, timeNS int64, marker bool) {
+func (t *Responder) Push(ssrc uint32, sn uint16, timeNS int64, marker bool) {
 	t.Lock()
 	defer t.Unlock()
 
-	t.recorder.Record(t.mSSRC, sn, timeNS/1000)
+	t.recorder.Record(ssrc, sn, timeNS/1000)
 
 	delta := timeNS - t.lastReport
-	if t.recorder.PacketsHeld() > 20 && t.mSSRC != 0 &&
+	if t.recorder.PacketsHeld() > 20 &&
 		(delta >= tccReportDelta ||
 			t.recorder.PacketsHeld() > 100 ||
 			(marker && delta >= tccReportDeltaAfterMark)) {

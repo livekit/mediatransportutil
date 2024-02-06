@@ -91,10 +91,10 @@ func TestBuildFeedbackOnPush(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			var fbrecv int
-			responder := NewTransportWideCCResponder(tc.mSSRC)
+			responder := NewTransportWideCCResponder()
 			responder.OnFeedback(func(pkts []rtcp.Packet) { fbrecv += len(pkts) })
 			for _, pkt := range tc.pkts {
-				responder.Push(pkt.sn, pkt.timeNS, pkt.marker)
+				responder.Push(tc.mSSRC, pkt.sn, pkt.timeNS, pkt.marker)
 			}
 			assert.Equal(t, tc.expectedFeedbackPackets, fbrecv)
 		})
