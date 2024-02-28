@@ -23,4 +23,5 @@ var (
 	ErrRTXPacket         = errors.New("packet already received")
 	ErrPacketMismatch    = errors.New("sequence number mismatch")
 	ErrPacketSizeInvalid = errors.New("invalid size")
+	ErrPacketTooLarge    = errors.New("packet too large")
 )

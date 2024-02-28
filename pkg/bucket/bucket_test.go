@@ -15,13 +15,14 @@
 package bucket
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/pion/rtp"
 	"github.com/stretchr/testify/require"
 )
 
-func Test_queue(t *testing.T) {
+func TestQueue(t *testing.T) {
 	TestPackets := []*rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -55,8 +56,7 @@ func Test_queue(t *testing.T) {
 		},
 	}
 
-	b := make([]byte, 16000)
-	q := NewBucket(&b)
+	q := NewBucket(10)
 
 	for _, p := range TestPackets {
 		buf, err := p.Marshal()
@@ -66,6 +66,10 @@ func Test_queue(t *testing.T) {
 			require.Equal(t, p.Header.SequenceNumber, q.HeadSequenceNumber())
 		})
 	}
+
+	pktToolarge := make([]byte, MaxPktSize+1)
+	_, err := q.AddPacket(pktToolarge)
+	require.ErrorIs(t, err, ErrPacketTooLarge)
 
 	expectedSN := uint16(6)
 	np := rtp.Packet{}
@@ -143,7 +147,7 @@ func Test_queue(t *testing.T) {
 	// should not be able to get sequence number 4 that was in the packet that was given to the bucket
 	// it should have been overwritten
 	expectedSN = TestPackets[2].Header.SequenceNumber
-	i, err = q.GetPacket(buff, expectedSN)
+	_, err = q.GetPacket(buff, expectedSN)
 	require.ErrorIs(t, err, ErrPacketMismatch)
 
 	// should be able to get overridden sequence number
@@ -155,7 +159,7 @@ func Test_queue(t *testing.T) {
 	require.Equal(t, expectedSN, np.SequenceNumber)
 }
 
-func Test_queue_edges(t *testing.T) {
+func TestQueueEdges(t *testing.T) {
 	TestPackets := []*rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -174,8 +178,7 @@ func Test_queue_edges(t *testing.T) {
 		},
 	}
 
-	b := make([]byte, 25000)
-	q := NewBucket(&b)
+	q := NewBucket(16)
 
 	for _, p := range TestPackets {
 		require.NotPanics(t, func() {
@@ -212,7 +215,7 @@ func Test_queue_edges(t *testing.T) {
 	require.Equal(t, expectedSN+1, np.SequenceNumber)
 }
 
-func Test_queue_wrap(t *testing.T) {
+func TestQueueWrap(t *testing.T) {
 	TestPackets := []*rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -256,8 +259,7 @@ func Test_queue_wrap(t *testing.T) {
 		},
 	}
 
-	b := make([]byte, 16000)
-	q := NewBucket(&b)
+	q := NewBucket(10)
 
 	for _, p := range TestPackets {
 		buf, err := p.Marshal()
@@ -332,4 +334,143 @@ func Test_queue_wrap(t *testing.T) {
 	require.ErrorIs(t, err, ErrPacketTooOld)
 	_, err = q.GetPacket(buff, 15)
 	require.ErrorIs(t, err, ErrPacketTooOld)
+}
+
+func TestQueueGrow(t *testing.T) {
+	TestPackets := []*rtp.Packet{
+		{
+			Header: rtp.Header{
+				SequenceNumber: 1,
+			},
+			Payload: []byte{1},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 3,
+			},
+			Payload: []byte{3},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 4,
+			},
+			Payload: []byte{4},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 6,
+			},
+			Payload: []byte{6},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 7,
+			},
+			Payload: []byte{7},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 10,
+			},
+			Payload: []byte{10},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 13,
+			},
+			Payload: []byte{13},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 15,
+			},
+			Payload: []byte{15},
+		},
+	}
+
+	q := NewBucket(10)
+
+	for _, p := range TestPackets {
+		buf, err := p.Marshal()
+		require.NoError(t, err)
+		require.NotPanics(t, func() {
+			_, _ = q.AddPacket(buf)
+		})
+	}
+
+	// seq1 is too old
+	pbuf, _ := TestPackets[0].Marshal()
+	_, err := q.AddPacket(pbuf)
+	require.ErrorIs(t, err, ErrPacketTooOld)
+
+	require.Equal(t, q.Grow(), 20)
+	require.Equal(t, q.Capacity(), 20)
+
+	// grow the bucket should not impact the existed packets
+	buf := make([]byte, MaxPktSize)
+	for _, sn := range []uint16{15, 13, 10, 7, 6} {
+		i, err := q.GetPacket(buf, sn)
+		require.NoError(t, err)
+		require.Equal(t, 13, i)
+		require.Equal(t, sn, uint16(buf[i-1]))
+	}
+
+	// too old packets before grow should not be found
+	for _, sn := range []uint16{4, 3, 2, 1} {
+		_, err := q.GetPacket(buf, sn)
+		require.True(t, errors.Is(err, ErrPacketSizeInvalid) || errors.Is(err, ErrPacketMismatch))
+	}
+
+	// seq1 can be added and retrieved after grow
+	_, err = q.AddPacket(pbuf)
+	require.NoError(t, err)
+	i, err := q.GetPacket(buf, 1)
+	require.NoError(t, err)
+	require.Equal(t, 13, i)
+	require.EqualValues(t, 1, uint16(buf[i-1]))
+
+	// add a packet with gap less than the growed capacity
+	np := rtp.Packet{
+		Header: rtp.Header{
+			SequenceNumber: 34,
+		},
+	}
+	pbuf, _ = np.Marshal()
+	_, err = q.AddPacket(pbuf)
+	require.NoError(t, err)
+	for _, sn := range []uint16{34, 15} {
+		_, err := q.GetPacket(buf, sn)
+		require.NoError(t, err)
+	}
+
+	// add a packet with a large gap in sequence number which will invalidate all the slots
+	np2 := &rtp.Packet{
+		Header: rtp.Header{
+			SequenceNumber: 156,
+		},
+	}
+	pbuf, err = np2.Marshal()
+	require.NoError(t, err)
+	_, err = q.AddPacket(pbuf)
+	require.NoError(t, err)
+	_, err = q.GetPacket(buf, 156)
+	require.NoError(t, err)
+
+	for _, sn := range []uint16{34, 15} {
+		_, err := q.GetPacket(buf, sn)
+		require.ErrorIs(t, err, ErrPacketTooOld)
+	}
+
+	require.Equal(t, q.Grow(), 30)
+	np3 := &rtp.Packet{
+		Header: rtp.Header{
+			SequenceNumber: 127,
+		},
+	}
+	pbuf, err = np3.Marshal()
+	require.NoError(t, err)
+	_, err = q.AddPacket(pbuf)
+	require.NoError(t, err)
+	_, err = q.GetPacket(buf, 127)
+	require.NoError(t, err)
 }
