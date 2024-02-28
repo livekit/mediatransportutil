@@ -44,26 +44,13 @@ func NewBucket(capacity int) *Bucket {
 		slots:        make([][]byte, capacity),
 	}
 
-	pktSize := MaxPktSize + pktSizeHeader
-	buf := make([]byte, pktSize*capacity)
-	for i := 0; i < capacity; i++ {
-		b.slots[i] = buf[i*pktSize : (i+1)*pktSize]
-	}
-
-	b.invalidate(0, b.maxSteps)
+	b.slots = createSlots(capacity)
 	return b
 }
 
 // Grow increases the capacity of the bucket by adding initial capacity to the buffer
 func (b *Bucket) Grow() int {
-	pktSize := MaxPktSize + pktSizeHeader
-	buf := make([]byte, pktSize*b.initCapacity)
-	newSlots := make([][]byte, b.initCapacity)
-	for i := 0; i < b.initCapacity; i++ {
-		newSlots[i] = buf[i*pktSize : (i+1)*pktSize]
-		binary.BigEndian.PutUint16(newSlots[i], invalidPktSize)
-	}
-
+	newSlots := createSlots(b.initCapacity)
 	growedSlots := append(b.slots, newSlots...)
 	// move wrapped slots to new slots
 	for i := b.maxSteps - 1; i >= b.step; i-- {
@@ -237,4 +224,15 @@ func (b *Bucket) invalidate(startSlot int, numSlots int) {
 		off := b.wrap(startSlot + i)
 		binary.BigEndian.PutUint16(b.slots[off], invalidPktSize)
 	}
+}
+
+func createSlots(capacity int) [][]byte {
+	pktSize := MaxPktSize + pktSizeHeader
+	buf := make([]byte, pktSize*capacity)
+	slots := make([][]byte, capacity)
+	for i := 0; i < capacity; i++ {
+		slots[i] = buf[i*pktSize : (i+1)*pktSize]
+		binary.BigEndian.PutUint16(slots[i], invalidPktSize)
+	}
+	return slots
 }
