@@ -41,7 +41,6 @@ func NewBucket(capacity int) *Bucket {
 	b := &Bucket{
 		initCapacity: capacity,
 		maxSteps:     capacity,
-		slots:        make([][]byte, capacity),
 	}
 
 	b.slots = createSlots(capacity)
