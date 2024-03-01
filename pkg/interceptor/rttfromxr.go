@@ -179,14 +179,13 @@ func (r *RTTFromXR) handleXR(xr *rtcp.ExtendedReport) {
 			}
 
 		case *rtcp.DLRRReportBlock:
-				for _, dlrrReport := range rr.Reports {
-					nowNTP := util.ToNtpTime(time.Now())
-					nowNTP32 := uint32(nowNTP >> 16)
-					ntpDiff := nowNTP32 - dlrrReport.LastRR - dlrrReport.DLRR
-					rtt := uint32(math.Ceil(float64(ntpDiff) * 1000.0 / 65536.0))
-					r.onRTT(rtt)
-					break
-				}
+			for _, dlrrReport := range rr.Reports {
+				nowNTP := util.ToNtpTime(time.Now())
+				nowNTP32 := uint32(nowNTP >> 16)
+				ntpDiff := nowNTP32 - dlrrReport.LastRR - dlrrReport.DLRR
+				rtt := uint32(math.Ceil(float64(ntpDiff) * 1000.0 / 65536.0))
+				r.onRTT(rtt)
+				break
 			}
 		}
 	}
