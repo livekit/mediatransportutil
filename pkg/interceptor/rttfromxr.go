@@ -132,56 +132,9 @@ func (r *RTTFromXR) BindRTCPReader(reader interceptor.RTCPReader) interceptor.RT
 			return n, a, err
 		}
 
-		var (
-			rttUpdated    bool
-			dlrrResponsed bool
-		)
 		for _, pkt := range pkts {
 			if xr, ok := pkt.(*rtcp.ExtendedReport); ok {
-				for _, report := range xr.Reports {
-					switch rr := report.(type) {
-					case *rtcp.ReceiverReferenceTimeReportBlock:
-						if dlrrResponsed {
-							continue
-						}
-						dlrrResponsed = true
-						var dlrrs []rtcp.DLRRReport
-						r.lock.Lock()
-						for _, ssrc := range r.localTrackSsrcs {
-							dlrrs = append(dlrrs, rtcp.DLRRReport{
-								SSRC:   ssrc,
-								LastRR: uint32(rr.NTPTimestamp >> 16),
-							})
-						}
-						writer := r.writer
-						r.lock.Unlock()
-						if len(dlrrs) > 0 && writer != nil {
-							writer.Write([]rtcp.Packet{&rtcp.ExtendedReport{
-								SenderSSRC: xr.SenderSSRC,
-								Reports: []rtcp.ReportBlock{
-									&rtcp.DLRRReportBlock{
-										Reports: dlrrs,
-									},
-								},
-							}}, nil)
-						}
-
-					case *rtcp.DLRRReportBlock:
-						if !rttUpdated {
-							for _, dlrrReport := range rr.Reports {
-								nowNTP := util.ToNtpTime(time.Now())
-								nowNTP32 := uint32(nowNTP >> 16)
-								ntpDiff := nowNTP32 - dlrrReport.LastRR - dlrrReport.DLRR
-								rtt := uint32(math.Ceil(float64(ntpDiff) * 1000.0 / 65536.0))
-								rttUpdated = true
-								r.onRTT(rtt)
-								break
-							}
-						}
-					}
-				}
-
-				break
+				r.handleXR(xr)
 			}
 		}
 		return n, a, nil
@@ -198,4 +151,43 @@ func (r *RTTFromXR) BindRTCPWriter(writer interceptor.RTCPWriter) interceptor.RT
 func (r *RTTFromXR) Close() error {
 	close(r.close)
 	return nil
+}
+
+func (r *RTTFromXR) handleXR(xr *rtcp.ExtendedReport) {
+	for _, report := range xr.Reports {
+		switch rr := report.(type) {
+		case *rtcp.ReceiverReferenceTimeReportBlock:
+			var dlrrs []rtcp.DLRRReport
+			r.lock.Lock()
+			for _, ssrc := range r.localTrackSsrcs {
+				dlrrs = append(dlrrs, rtcp.DLRRReport{
+					SSRC:   ssrc,
+					LastRR: uint32(rr.NTPTimestamp >> 16),
+				})
+			}
+			writer := r.writer
+			r.lock.Unlock()
+			if len(dlrrs) > 0 && writer != nil {
+				writer.Write([]rtcp.Packet{&rtcp.ExtendedReport{
+					SenderSSRC: xr.SenderSSRC,
+					Reports: []rtcp.ReportBlock{
+						&rtcp.DLRRReportBlock{
+							Reports: dlrrs,
+						},
+					},
+				}}, nil)
+			}
+
+		case *rtcp.DLRRReportBlock:
+				for _, dlrrReport := range rr.Reports {
+					nowNTP := util.ToNtpTime(time.Now())
+					nowNTP32 := uint32(nowNTP >> 16)
+					ntpDiff := nowNTP32 - dlrrReport.LastRR - dlrrReport.DLRR
+					rtt := uint32(math.Ceil(float64(ntpDiff) * 1000.0 / 65536.0))
+					r.onRTT(rtt)
+					break
+				}
+			}
+		}
+	}
 }
