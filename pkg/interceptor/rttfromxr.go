@@ -135,6 +135,7 @@ func (r *RTTFromXR) BindRTCPReader(reader interceptor.RTCPReader) interceptor.RT
 		for _, pkt := range pkts {
 			if xr, ok := pkt.(*rtcp.ExtendedReport); ok {
 				r.handleXR(xr)
+				break
 			}
 		}
 		return n, a, nil
@@ -157,25 +158,28 @@ func (r *RTTFromXR) handleXR(xr *rtcp.ExtendedReport) {
 	for _, report := range xr.Reports {
 		switch rr := report.(type) {
 		case *rtcp.ReceiverReferenceTimeReportBlock:
-			var dlrrs []rtcp.DLRRReport
+			var responses []rtcp.Packet
 			r.lock.Lock()
 			for _, ssrc := range r.localTrackSsrcs {
-				dlrrs = append(dlrrs, rtcp.DLRRReport{
-					SSRC:   ssrc,
-					LastRR: uint32(rr.NTPTimestamp >> 16),
+				responses = append(responses, &rtcp.ExtendedReport{
+					SenderSSRC: ssrc,
+					Reports: []rtcp.ReportBlock{
+						&rtcp.DLRRReportBlock{
+							Reports: []rtcp.DLRRReport{
+								{
+									SSRC:   xr.SenderSSRC,
+									LastRR: uint32(rr.NTPTimestamp >> 16),
+									DLRR:   0, //respond immediately
+								},
+							},
+						},
+					},
 				})
 			}
 			writer := r.writer
 			r.lock.Unlock()
-			if len(dlrrs) > 0 && writer != nil {
-				writer.Write([]rtcp.Packet{&rtcp.ExtendedReport{
-					SenderSSRC: xr.SenderSSRC,
-					Reports: []rtcp.ReportBlock{
-						&rtcp.DLRRReportBlock{
-							Reports: dlrrs,
-						},
-					},
-				}}, nil)
+			if len(responses) > 0 && writer != nil {
+				writer.Write(responses, nil)
 			}
 
 		case *rtcp.DLRRReportBlock:
