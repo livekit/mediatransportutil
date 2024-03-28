@@ -189,11 +189,14 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 	ctx1, cancel1 := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel1()
 
-	var mu sync.Mutex
+	var mu sync.Mutex // RAJA-REMOVE
 	ipAddrs := map[string]int{}
+	/* RAJA-REMOVE
 	var wg sync.WaitGroup
 	wg.Add(len(stunServers))
+	*/
 	for _, ss := range stunServers {
+		/* RAJA-REMOVE
 		ss := ss
 		go func() {
 			defer wg.Done()
@@ -210,8 +213,20 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 				logger.Errorw("could not get from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
 			}
 		}()
+		*/
+		ipAddr, err := findExternalIP(ctx1, ss, localAddr)
+		if err == nil {
+			mu.Lock()
+			ipAddrs[ipAddr]++
+			mu.Unlock()
+			fmt.Printf("got from stun server, server: %s, error: %+v, ipAddr: %s\n", ss, err, ipAddr) // REMOVE
+			logger.Errorw("got from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
+		} else {
+			fmt.Printf("could not get from stun server, server: %s, error: %+v, ipAddr: %s\n", ss, err, ipAddr) // REMOVE
+			logger.Errorw("could not get from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
+		}
 	}
-	wg.Wait()
+	// RAJA-REMOVE wg.Wait()
 
 	mu.Lock()
 	defer mu.Unlock()
