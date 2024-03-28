@@ -205,8 +205,8 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 				fmt.Printf("got from stun server, server: %s, error: %+v, ipAddr: %s\n", ss, err, ipAddr) // REMOVE
 				logger.Errorw("got from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
 			} else {
-				fmt.Printf("could not get from stun server, server: %s, error: %+v\n", ss, err) // REMOVE
-				logger.Errorw("could not get from stun server", err, "ss", ss)                  // REMOVE
+				fmt.Printf("could not get from stun server, server: %s, error: %+v, ipAddr: %s\n", ss, err, ipAddr) // REMOVE
+				logger.Errorw("could not get from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
 			}
 		}()
 	}
