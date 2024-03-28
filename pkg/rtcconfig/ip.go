@@ -206,8 +206,8 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 				mu.Lock()
 				ipAddrs[ipAddr]++
 				mu.Unlock()
-				fmt.Printf("got from stun server, server: %s, error: %+v\n", ss, err) // REMOVE
-				logger.Errorw("got from stun server", err, "ss", ss)                  // REMOVE
+				fmt.Printf("got from stun server, server: %s, error: %+v, ipAddr: %s\n", ss, err, ipAddr) // REMOVE
+				logger.Errorw("got from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
 			} else {
 				fmt.Printf("could not get from stun server, server: %s, error: %+v\n", ss, err) // REMOVE
 				logger.Errorw("could not get from stun server", err, "ss", ss)                  // REMOVE
@@ -218,6 +218,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 
 	mu.Lock()
 	defer mu.Unlock()
+	fmt.Printf("ipAddrs: %+v\n", ipAddrs) // REMOVE
 	if len(ipAddrs) > 1 {
 		return "", errors.New("too many external IP addresses")
 	}
