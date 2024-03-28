@@ -249,7 +249,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ipFilter func(net.IP) bool) ([]str
 				addr, err := GetExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port})
 				if err != nil {
 					if strings.Contains(err.Error(), "address already in use") {
-						logger.Debugw("failed to get external ip, address already in use", "local", localIP, "port", port)
+						logger.Infow("failed to get external ip, address already in use", "local", localIP, "port", port)
 						continue
 					}
 					logger.Infow("failed to get external ip", "local", localIP, "err", err)
