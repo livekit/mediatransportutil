@@ -235,6 +235,7 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 
 	srv, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
+		fmt.Printf("could not listen, nodeIP: %s, localAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
 		return err
 	}
 	defer srv.Close()
@@ -247,6 +248,7 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 		for {
 			n, err := srv.Read(buf)
 			if err != nil {
+				fmt.Printf("error reading from UDP socket, nodeIP: %s, udpAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
 				logger.Debugw("error reading from UDP socket", "err", err)
 				return
 			}
@@ -259,11 +261,13 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 
 	cli, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP(nodeIP), Port: srv.LocalAddr().(*net.UDPAddr).Port})
 	if err != nil {
+		fmt.Printf("could not dial, nodeIP: %s, localAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
 		return err
 	}
 	defer cli.Close()
 
 	if _, err = cli.Write([]byte(magicString)); err != nil {
+		fmt.Printf("could not write, nodeIP: %s, localAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
 		return err
 	}
 
