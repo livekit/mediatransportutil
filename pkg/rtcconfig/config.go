@@ -92,6 +92,7 @@ func (conf *RTCConfig) Validate(development bool) error {
 	if conf.NodeIP == "" || conf.UseExternalIP {
 		conf.NodeIP, err = conf.determineIP()
 		if err != nil {
+			fmt.Printf("could not determine node ip, error: %+v\n", err) // REMOVE
 			logger.Warnw("could not determine node ip", err)
 			return err
 		}
