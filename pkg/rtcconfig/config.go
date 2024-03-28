@@ -35,6 +35,7 @@ const (
 var DefaultStunServers = []string{
 	"stun.l.google.com:19302",
 	"stun1.l.google.com:19302",
+	"global.stun.twilio.com:3478",
 }
 
 type RTCConfig struct {
