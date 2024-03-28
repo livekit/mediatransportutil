@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/pion/stun"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
 	"github.com/livekit/protocol/logger"
@@ -104,16 +106,11 @@ func GetLocalIPAddresses(includeLoopback bool, preferredInterfaces []string) ([]
 	return nil, fmt.Errorf("could not find local IP address")
 }
 
-// GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
-// else the address will be used to validate the external IP is accessible from the outside.
-func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
-	if len(stunServers) == 0 {
-		return "", errors.New("STUN servers are required but not defined")
-	}
+func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) (string, error) {
 	dialer := &net.Dialer{
 		LocalAddr: localAddr,
 	}
-	conn, err := dialer.Dial("udp4", stunServers[0])
+	conn, err := dialer.Dial("udp4", stunServer)
 	if err != nil {
 		return "", err
 	}
@@ -121,17 +118,19 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 	if err != nil {
 		return "", err
 	}
-	defer c.Close()
 
 	message, err := stun.Build(stun.TransactionID, stun.BindingRequest)
 	if err != nil {
 		return "", err
 	}
 
+	var mu sync.Mutex
 	var stunErr error
-	// sufficiently large buffer to not block it
-	ipChan := make(chan string, 20)
+	var ipAddr string
 	err = c.Start(message, func(res stun.Event) {
+		mu.Lock()
+		defer mu.Unlock()
+
 		if res.Error != nil {
 			stunErr = res.Error
 			return
@@ -144,36 +143,89 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 		}
 		ip := xorAddr.IP.To4()
 		if ip != nil {
-			ipChan <- ip.String()
+			ipAddr = ip.String()
 		}
 	})
 	if err != nil {
 		return "", err
 	}
 
-	ctx1, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	select {
-	case nodeIP := <-ipChan:
-		if localAddr == nil {
-			return nodeIP, nil
+	for {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
 		}
-		_ = c.Close()
-		return nodeIP, validateExternalIP(ctx1, nodeIP, localAddr.(*net.UDPAddr))
-	case <-ctx1.Done():
-		msg := "could not determine public IP"
-		if stunErr != nil {
-			return "", errors.Wrap(stunErr, msg)
-		} else {
-			return "", fmt.Errorf(msg)
+
+		isDone := false
+		mu.Lock()
+		if stunErr != nil || ipAddr != "" {
+			isDone = true
 		}
+		mu.Unlock()
+
+		if isDone {
+			break
+		}
+
+		time.Sleep(50 * time.Millisecond)
 	}
+
+	if stunErr != nil {
+		return "", stunErr
+	}
+
+	return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
+}
+
+// GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
+// else the address will be used to validate the external IP is accessible from the outside.
+func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
+	if len(stunServers) == 0 {
+		return "", errors.New("STUN servers are required but not defined")
+	}
+
+	ctx1, cancel1 := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel1()
+
+	var mu sync.Mutex
+	var ipAddrs map[string]int
+	var wg sync.WaitGroup
+	wg.Add(len(stunServers))
+	for _, ss := range stunServers {
+		ss := ss
+		go func() {
+			defer wg.Done()
+
+			ipAddr, err := findExternalIP(ctx1, ss, localAddr)
+			if err == nil {
+				mu.Lock()
+				ipAddrs[ipAddr]++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(ipAddrs) > 1 {
+		return "", errors.New("too many external IP addresses")
+	}
+	if len(ipAddrs) == 0 {
+		return "", errors.New("no external IP addresses")
+	}
+
+	return maps.Keys(ipAddrs)[0], nil
 }
 
 // validateExternalIP validates that the external IP is accessible from the outside by listen the local address,
 // it will send a magic string to the external IP and check the string is received by the local address.
-func validateExternalIP(ctx context.Context, nodeIP string, addr *net.UDPAddr) error {
-	srv, err := net.ListenUDP("udp", addr)
+func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error {
+	udpAddr, ok := addr.(*net.UDPAddr)
+	if !ok {
+		return errors.New("not UDP address")
+	}
+
+	srv, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return err
 	}
@@ -207,13 +259,13 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr *net.UDPAddr) e
 		return err
 	}
 
-	ctx1, cancel := context.WithTimeout(ctx, 1*time.Second)
+	ctx1, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	select {
 	case <-validCh:
 		return nil
 	case <-ctx1.Done():
-		break
+		logger.Warnw("could not validate external IP", ctx1.Err(), "ip", nodeIP)
+		return ctx1.Err()
 	}
-	return fmt.Errorf("could not validate external IP: %s", nodeIP)
 }
