@@ -193,7 +193,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 	defer cancel1()
 
 	var mu sync.Mutex
-	var ipAddrs map[string]int
+	ipAddrs := map[string]int{}
 	var wg sync.WaitGroup
 	wg.Add(len(stunServers))
 	for _, ss := range stunServers {
