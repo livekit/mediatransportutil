@@ -118,6 +118,7 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 	if err != nil {
 		return "", err
 	}
+	defer c.Close()
 
 	message, err := stun.Build(stun.TransactionID, stun.BindingRequest)
 	if err != nil {
