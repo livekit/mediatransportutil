@@ -175,11 +175,7 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 		return "", stunErr
 	}
 
-	// TODO-VALIDATE return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
-	if err := validateExternalIP(ctx, ipAddr, localAddr); err != nil {
-		logger.Warnw("could not validate ip addr", err, "ipAddr", ipAddr, "localAddr", localAddr)
-	}
-	return ipAddr, nil
+	return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
 }
 
 // GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
