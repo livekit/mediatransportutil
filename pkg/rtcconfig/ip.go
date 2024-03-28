@@ -246,7 +246,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error {
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
-		udpAddr = &net.UDPAddr{}
+		udpAddr = &net.UDPAddr{IP: net.ParseIP("0.0.0.0")}
 	}
 
 	srv, err := net.ListenUDP("udp", udpAddr)
