@@ -29,6 +29,11 @@ import (
 	"github.com/livekit/protocol/logger"
 )
 
+const (
+	stunPingTimeout   = 5 * time.Second
+	validationTimeout = 5 * time.Second
+)
+
 func (conf *RTCConfig) determineIP() (string, error) {
 	if conf.UseExternalIP {
 		stunServers := conf.STUNServers
@@ -176,6 +181,7 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 		return "", stunErr
 	}
 
+	fmt.Printf("%+v: got ipAddr: %s from STUN server: %s\n", time.Now(), ipAddr, stunServer) // REMOVE
 	return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
 }
 
@@ -186,7 +192,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 		return "", errors.New("STUN servers are required but not defined")
 	}
 
-	ctx1, cancel1 := context.WithTimeout(ctx, 5*time.Second)
+	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout+validationTimeout)
 	defer cancel1()
 
 	var mu sync.Mutex // RAJA-REMOVE
@@ -214,23 +220,24 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 			}
 		}()
 		*/
+		fmt.Printf("%+v: finding address using server: %s\n", time.Now(), ss) // REMOVE
 		ipAddr, err := findExternalIP(ctx1, ss, localAddr)
 		if err == nil {
 			mu.Lock()
 			ipAddrs[ipAddr]++
 			mu.Unlock()
-			fmt.Printf("got from stun server, server: %s, error: %+v, ipAddr: %s\n", ss, err, ipAddr) // REMOVE
-			logger.Errorw("got from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
+			fmt.Printf("%+v: got from stun server, server: %s, error: %+v, ipAddr: %s\n", time.Now(), ss, err, ipAddr) // REMOVE
+			logger.Errorw("got from stun server", err, "ss", ss, "ipAddr", ipAddr)                                     // REMOVE
 		} else {
-			fmt.Printf("could not get from stun server, server: %s, error: %+v, ipAddr: %s\n", ss, err, ipAddr) // REMOVE
-			logger.Errorw("could not get from stun server", err, "ss", ss, "ipAddr", ipAddr)                    // REMOVE
+			fmt.Printf("%+v: could not get from stun server, server: %s, error: %+v, ipAddr: %s\n", time.Now(), ss, err, ipAddr) // REMOVE
+			logger.Errorw("could not get from stun server", err, "ss", ss, "ipAddr", ipAddr)                                     // REMOVE
 		}
 	}
 	// RAJA-REMOVE wg.Wait()
 
 	mu.Lock()
 	defer mu.Unlock()
-	fmt.Printf("ipAddrs: %+v\n", ipAddrs) // REMOVE
+	fmt.Printf("%+v: ipAddrs: %+v\n", time.Now(), ipAddrs) // REMOVE
 	if len(ipAddrs) > 1 {
 		return "", errors.New("too many external IP addresses")
 	}
@@ -248,12 +255,14 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 	if !ok {
 		udpAddr = &net.UDPAddr{IP: net.ParseIP("0.0.0.0")}
 	}
+	fmt.Printf("%+v: udpAddr: %+v\n", time.Now(), udpAddr) // REMOVE
 
 	srv, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		fmt.Printf("could not listen, nodeIP: %s, localAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
+		fmt.Printf("%+v: could not listen, nodeIP: %s, localAddr: %+v, error: %+v\n", time.Now(), nodeIP, udpAddr, err) // REMOVE
 		return err
 	}
+	fmt.Printf("%+v: server local address: %+v\n", time.Now(), srv.LocalAddr()) // REMOVE
 	defer srv.Close()
 
 	magicString := "9#B8D2Nvg2xg5P$ZRwJ+f)*^Nne6*W3WamGY"
@@ -264,7 +273,7 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 		for {
 			n, err := srv.Read(buf)
 			if err != nil {
-				fmt.Printf("error reading from UDP socket, nodeIP: %s, udpAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
+				fmt.Printf("%+v: error reading from UDP socket, nodeIP: %s, udpAddr: %+v, error: %+v\n", time.Now(), nodeIP, udpAddr, err) // REMOVE
 				logger.Debugw("error reading from UDP socket", "err", err)
 				return
 			}
@@ -277,23 +286,24 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 
 	cli, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP(nodeIP), Port: srv.LocalAddr().(*net.UDPAddr).Port})
 	if err != nil {
-		fmt.Printf("could not dial, nodeIP: %s, localAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
+		fmt.Printf("%+v: could not dial, nodeIP: %s, localAddr: %+v, error: %+v\n", time.Now(), nodeIP, udpAddr, err) // REMOVE
 		return err
 	}
 	defer cli.Close()
 
 	if _, err = cli.Write([]byte(magicString)); err != nil {
-		fmt.Printf("could not write, nodeIP: %s, localAddr: %+v, error: %+v\n", nodeIP, udpAddr, err) // REMOVE
+		fmt.Printf("%+v: could not write, nodeIP: %s, localAddr: %+v, error: %+v\n", time.Now(), nodeIP, udpAddr, err) // REMOVE
 		return err
 	}
 
-	ctx1, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
+	// RAJA-REMOVE ctx1, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// RAJA-REMOVE defer cancel()
 	select {
 	case <-validCh:
 		return nil
-	case <-ctx1.Done():
-		logger.Warnw("could not validate external IP", ctx1.Err(), "ip", nodeIP)
-		return ctx1.Err()
+		// RAJA-REMOVE case <-ctx1.Done():
+	case <-ctx.Done():
+		logger.Warnw("could not validate external IP", ctx.Err(), "ip", nodeIP)
+		return ctx.Err()
 	}
 }
