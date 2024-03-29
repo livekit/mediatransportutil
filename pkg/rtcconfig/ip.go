@@ -128,13 +128,18 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 	}
 	c, err := stun.NewClient(conn)
 	if err != nil {
+		conn.Close()
 		return "", err
 	}
-	defer c.Close()
-	defer conn.Close()
+
+	closeConns := func() {
+		c.Close()
+		conn.Close()
+	}
 
 	message, err := stun.Build(stun.TransactionID, stun.BindingRequest)
 	if err != nil {
+		closeConns()
 		return "", err
 	}
 
@@ -161,11 +166,13 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 		}
 	})
 	if err != nil {
+		closeConns()
 		return "", err
 	}
 
 	for {
 		if ctx1.Err() != nil {
+			closeConns()
 			return "", ctx1.Err()
 		}
 
@@ -184,9 +191,11 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 	}
 
 	if stunErr != nil {
+		closeConns()
 		return "", stunErr
 	}
 
+	closeConns()
 	fmt.Printf("%+v: got ipAddr: %s from STUN server: %s\n", time.Now(), ipAddr, stunServer) // REMOVE
 	return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
 }
@@ -238,7 +247,6 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 			fmt.Printf("%+v: could not get from stun server, server: %s, error: %+v, ipAddr: %s\n", time.Now(), ss, err, ipAddr) // REMOVE
 			logger.Errorw("could not get from stun server", err, "ss", ss, "ipAddr", ipAddr)                                     // REMOVE
 		}
-		break
 	}
 	// RAJA-REMOVE wg.Wait()
 
