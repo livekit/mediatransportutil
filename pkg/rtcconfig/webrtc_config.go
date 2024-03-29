@@ -246,6 +246,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ipFilter func(net.IP) bool) ([]str
 		go func(localIP string) {
 			defer wg.Done()
 			for _, port := range udpPorts {
+				fmt.Printf("%+v: getting external IP for local address, localIP: %s, localPort: %d\n", time.Now(), localIP, port) // REMOVE
 				addr, err := GetExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port})
 				if err != nil {
 					if strings.Contains(err.Error(), "address already in use") {

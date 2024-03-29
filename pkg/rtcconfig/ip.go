@@ -43,13 +43,16 @@ func (conf *RTCConfig) determineIP() (string, error) {
 		var err error
 		for i := 0; i < 3; i++ {
 			var ip string
+			fmt.Printf("%+v: determining IP\n", time.Now()) // REMOVE
 			ip, err = GetExternalIP(context.Background(), stunServers, nil)
 			if err == nil {
+				fmt.Printf("%+v: returning IP: %s\n", time.Now(), ip) // REMOVE
 				return ip, nil
 			} else {
 				time.Sleep(500 * time.Millisecond)
 			}
 		}
+		fmt.Printf("%+v: could not resolve external IP, error: %+v\n", time.Now(), err) // REMOVE
 		logger.Warnw("could not resolve external IP", err)
 		return "", errors.Errorf("could not resolve external IP: %v", err)
 	}
@@ -113,6 +116,9 @@ func GetLocalIPAddresses(includeLoopback bool, preferredInterfaces []string) ([]
 }
 
 func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) (string, error) {
+	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout)
+	defer cancel1()
+
 	dialer := &net.Dialer{
 		LocalAddr: localAddr,
 	}
@@ -159,8 +165,8 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 	}
 
 	for {
-		if ctx.Err() != nil {
-			return "", ctx.Err()
+		if ctx1.Err() != nil {
+			return "", ctx1.Err()
 		}
 
 		isDone := false
@@ -220,7 +226,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 			}
 		}()
 		*/
-		fmt.Printf("%+v: finding address using server: %s\n", time.Now(), ss) // REMOVE
+		fmt.Printf("%+v: finding address using server: %s, localAddr: %+v\n", time.Now(), ss, localAddr) // REMOVE
 		ipAddr, err := findExternalIP(ctx1, ss, localAddr)
 		if err == nil {
 			mu.Lock()
@@ -251,13 +257,9 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 // validateExternalIP validates that the external IP is accessible from the outside by listen the local address,
 // it will send a magic string to the external IP and check the string is received by the local address.
 func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error {
-	if addr == nil {
-		return nil
-	}
-
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
-		return errors.New("not UDP address")
+		udpAddr = &net.UDPAddr{}
 	}
 	fmt.Printf("%+v: udpAddr: %+v\n", time.Now(), udpAddr) // REMOVE
 
@@ -300,14 +302,13 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 		return err
 	}
 
-	// RAJA-REMOVE ctx1, cancel := context.WithTimeout(ctx, 5*time.Second)
-	// RAJA-REMOVE defer cancel()
+	ctx1, cancel1 := context.WithTimeout(ctx, validationTimeout)
+	defer cancel1()
 	select {
 	case <-validCh:
 		return nil
-		// RAJA-REMOVE case <-ctx1.Done():
-	case <-ctx.Done():
-		logger.Warnw("could not validate external IP", ctx.Err(), "ip", nodeIP)
-		return ctx.Err()
+	case <-ctx1.Done():
+		logger.Warnw("could not validate external IP", ctx1.Err(), "ip", nodeIP)
+		return ctx1.Err()
 	}
 }
