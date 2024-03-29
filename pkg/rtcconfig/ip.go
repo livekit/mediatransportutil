@@ -267,9 +267,13 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 // validateExternalIP validates that the external IP is accessible from the outside by listen the local address,
 // it will send a magic string to the external IP and check the string is received by the local address.
 func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error {
+	if addr == nil {
+		return nil
+	}
+
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
-		udpAddr = &net.UDPAddr{}
+		return errors.New("not UDP address")
 	}
 	fmt.Printf("%+v: udpAddr: %+v\n", time.Now(), udpAddr) // REMOVE
 
