@@ -192,7 +192,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 		return "", errors.New("STUN servers are required but not defined")
 	}
 
-	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout+validationTimeout)
+	ctx1, cancel1 := context.WithTimeout(ctx, time.Duration(len(stunServers))*(stunPingTimeout+validationTimeout))
 	defer cancel1()
 
 	var mu sync.Mutex // RAJA-REMOVE
@@ -251,9 +251,13 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 // validateExternalIP validates that the external IP is accessible from the outside by listen the local address,
 // it will send a magic string to the external IP and check the string is received by the local address.
 func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error {
+	if addr == nil {
+		return nil
+	}
+
 	udpAddr, ok := addr.(*net.UDPAddr)
 	if !ok {
-		udpAddr = &net.UDPAddr{IP: net.ParseIP("0.0.0.0")}
+		return errors.New("not UDP address")
 	}
 	fmt.Printf("%+v: udpAddr: %+v\n", time.Now(), udpAddr) // REMOVE
 
