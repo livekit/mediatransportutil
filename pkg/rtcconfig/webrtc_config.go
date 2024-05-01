@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pion/ice/v2"
+	"github.com/pion/transport/v2/stdnet"
 	"github.com/pion/webrtc/v3"
 
 	"github.com/livekit/mediatransportutil/pkg/transport"
@@ -189,6 +190,12 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			c.ICEServers = []webrtc.ICEServer{iceServerForStunServers(DefaultStunServers)}
 		}
 	}
+
+	net, err := stdnet.NewNet()
+	if err != nil {
+		return nil, err
+	}
+	s.SetNet(net)
 
 	return &WebRTCConfig{
 		Configuration:  c,
