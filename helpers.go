@@ -128,9 +128,9 @@ var (
 
 type TimeSyncInfo struct {
 	Id            string
-	SendTime      NtpTime
-	ReceptionTime NtpTime
-	PeerTime      NtpTime
+	SendTime      time.Time
+	ReceptionTime time.Time
+	PeerTime      time.Time
 
 	clock utils.Clock
 }
@@ -142,7 +142,7 @@ func (s *TimeSyncInfo) StartTimeSync() livekit.TimeSyncRequest {
 
 	s.Id = utils.NewGuid("")
 
-	s.SendTime = ToNtpTime(s.clock.Now())
+	s.SendTime = s.clock.Now()
 
 	return livekit.TimeSyncRequest{
 		Id: s.Id,
@@ -154,18 +154,18 @@ func (s *TimeSyncInfo) HandleTimeSyncResponse(resp livekit.TimeSyncResponse) err
 		return ErrTimeSyncIdMismatch
 	}
 
-	s.ReceptionTime = ToNtpTime(s.clock.Now())
-	s.PeerTime = NtpTime(resp.NtpTime)
+	s.ReceptionTime = s.clock.Now()
+	s.PeerTime = NtpTime(resp.NtpTime).Time()
 
 	return nil
 }
 
 func (s *TimeSyncInfo) GetPeerTimeForLocalTime(t time.Time) time.Time {
-	peerNtpTime := s.PeerTime + ToNtpTime(t) - (3*s.ReceptionTime-s.SendTime)/2
+	latency := s.ReceptionTime.Sub(s.SendTime) / 2
 
-	fmt.Println(s.ReceptionTime, s.SendTime, (3*s.ReceptionTime-s.SendTime)/2)
+	clockOffset := s.PeerTime.Sub(s.ReceptionTime) + latency
 
-	return peerNtpTime.Time()
+	return t.Add(clockOffset)
 }
 
 func HandleTimeSyncRequest(req livekit.TimeSyncRequest) livekit.TimeSyncResponse {

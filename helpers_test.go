@@ -15,7 +15,6 @@
 package mediatransportutil
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -58,7 +57,7 @@ func Test_TimeSync(t *testing.T) {
 		clock: cl,
 	}
 
-	cl.Set(time.Unix(1, 0))
+	cl.Set(time.Unix(0, 0))
 
 	req := s.StartTimeSync()
 
@@ -66,13 +65,19 @@ func Test_TimeSync(t *testing.T) {
 
 	resp := handleTimeSyncRequestWithClock(cl, req)
 
-	cl.Set(time.Unix(11, 0))
+	cl.Set(time.Unix(10, 0))
 
 	err := s.HandleTimeSyncResponse(resp)
 	require.NoError(t, err)
 
-	fmt.Println(s)
+	resp.Id = "foo"
+	err = s.HandleTimeSyncResponse(resp)
+	require.Equal(t, ErrTimeSyncIdMismatch, err)
 
-	pt := s.GetPeerTimeForLocalTime(time.Unix(10, 0))
-	require.Equal(t, time.Unix(1_000_005, 0).UnixNano(), pt.UnixNano())
+	pt := s.GetPeerTimeForLocalTime(time.Unix(5, 0))
+	require.Equal(t, time.Unix(1_000_000, 0).UnixNano(), pt.UnixNano())
+
+	pt = s.GetPeerTimeForLocalTime(time.Unix(15, 0))
+	require.Equal(t, time.Unix(1_000_010, 0).UnixNano(), pt.UnixNano())
+
 }
