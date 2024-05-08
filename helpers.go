@@ -20,6 +20,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/utils"
 	"github.com/pion/rtcp"
 )
 
@@ -116,4 +118,65 @@ func GetRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 
 func GetRttMsFromReceiverReportOnly(report *rtcp.ReceptionReport) (uint32, error) {
 	return getRttMs(report, 0, time.Time{}, true)
+}
+
+// ------------------------------------------
+
+var (
+	ErrTimeSyncIdMismatch = errors.New("unexpected ID in time sync response")
+)
+
+type TimeSyncInfo struct {
+	Id            string
+	SendTime      NtpTime
+	ReceptionTime NtpTime
+	PeerTime      NtpTime
+
+	clock utils.Clock
+}
+
+func (s *TimeSyncInfo) StartTimeSync() livekit.TimeSyncRequest {
+	if s.clock == nil {
+		s.clock = utils.SystemClock{}
+	}
+
+	s.Id = utils.NewGuid("")
+
+	s.SendTime = ToNtpTime(s.clock.Now())
+
+	return livekit.TimeSyncRequest{
+		Id: s.Id,
+	}
+}
+
+func (s *TimeSyncInfo) HandleTimeSyncResponse(resp livekit.TimeSyncResponse) error {
+	if resp.Id != s.Id {
+		return ErrTimeSyncIdMismatch
+	}
+
+	s.ReceptionTime = ToNtpTime(s.clock.Now())
+	s.PeerTime = NtpTime(resp.NtpTime)
+
+	return nil
+}
+
+func (s *TimeSyncInfo) GetPeerTimeForLocalTime(t time.Time) time.Time {
+	peerNtpTime := s.PeerTime + ToNtpTime(t) - (3*s.ReceptionTime-s.SendTime)/2
+
+	fmt.Println(s.ReceptionTime, s.SendTime, (3*s.ReceptionTime-s.SendTime)/2)
+
+	return peerNtpTime.Time()
+}
+
+func HandleTimeSyncRequest(req livekit.TimeSyncRequest) livekit.TimeSyncResponse {
+	return handleTimeSyncRequestWithClock(utils.SystemClock{}, req)
+}
+
+func handleTimeSyncRequestWithClock(clock utils.Clock, req livekit.TimeSyncRequest) livekit.TimeSyncResponse {
+	now := ToNtpTime(clock.Now())
+
+	return livekit.TimeSyncResponse{
+		Id:      req.Id,
+		NtpTime: uint64(now),
+	}
 }

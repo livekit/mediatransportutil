@@ -15,8 +15,12 @@
 package mediatransportutil
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/livekit/protocol/utils"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_timeToNtp(t *testing.T) {
@@ -45,4 +49,30 @@ func Test_timeToNtp(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_TimeSync(t *testing.T) {
+	cl := &utils.SimulatedClock{}
+
+	s := &TimeSyncInfo{
+		clock: cl,
+	}
+
+	cl.Set(time.Unix(1, 0))
+
+	req := s.StartTimeSync()
+
+	cl.Set(time.Unix(1_000_000, 0))
+
+	resp := handleTimeSyncRequestWithClock(cl, req)
+
+	cl.Set(time.Unix(11, 0))
+
+	err := s.HandleTimeSyncResponse(resp)
+	require.NoError(t, err)
+
+	fmt.Println(s)
+
+	pt := s.GetPeerTimeForLocalTime(time.Unix(10, 0))
+	require.Equal(t, time.Unix(1_000_005, 0).UnixNano(), pt.UnixNano())
 }
