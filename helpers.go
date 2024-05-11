@@ -123,6 +123,7 @@ func GetRttMsFromReceiverReportOnly(report *rtcp.ReceptionReport) (uint32, error
 // ------------------------------------------
 
 var (
+	ErrTimeNotSynced      = errors.New("time sync info hasn't been synchronized to source")
 	ErrTimeSyncIdMismatch = errors.New("unexpected ID in time sync response")
 )
 
@@ -143,6 +144,8 @@ func (s *TimeSyncInfo) StartTimeSync() livekit.TimeSyncRequest {
 	s.Id = utils.NewGuid("")
 
 	s.SendTime = s.clock.Now()
+	s.ReceptionTime = time.Time{}
+	s.PeerTime = time.Time{}
 
 	return livekit.TimeSyncRequest{
 		Id: s.Id,
@@ -160,12 +163,16 @@ func (s *TimeSyncInfo) HandleTimeSyncResponse(resp livekit.TimeSyncResponse) err
 	return nil
 }
 
-func (s *TimeSyncInfo) GetPeerTimeForLocalTime(t time.Time) time.Time {
+func (s *TimeSyncInfo) GetPeerTimeForLocalTime(t time.Time) (time.Time, error) {
+	if s.SendTime.IsZero() || s.ReceptionTime.IsZero() || s.PeerTime.IsZero() {
+		return time.Time{}, ErrTimeNotSynced
+	}
+
 	latency := s.ReceptionTime.Sub(s.SendTime) / 2
 
 	clockOffset := s.PeerTime.Sub(s.ReceptionTime) + latency
 
-	return t.Add(clockOffset)
+	return t.Add(clockOffset), nil
 }
 
 func HandleTimeSyncRequest(req livekit.TimeSyncRequest) livekit.TimeSyncResponse {
