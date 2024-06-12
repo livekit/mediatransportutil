@@ -336,6 +336,61 @@ func TestQueueWrap(t *testing.T) {
 	require.ErrorIs(t, err, ErrPacketTooOld)
 }
 
+func TestGrowingFullBucket(t *testing.T) {
+	TestPackets := make([]*rtp.Packet, 8)
+	for i := 0; i < 8; i++ {
+		TestPackets[i] = &rtp.Packet{
+			Header: rtp.Header{
+				SequenceNumber: uint16(i),
+			},
+			Payload: []byte{byte(i)},
+		}
+	}
+
+	bucket := NewBucket(4)
+
+	for _, p := range TestPackets {
+		buf, err := p.Marshal()
+		require.NoError(t, err)
+		_, err = bucket.AddPacket(buf)
+		require.NoError(t, err)
+	}
+
+	for i := 7; i >= 4; i-- {
+		_, err := bucket.GetPacket(make([]byte, MaxPktSize), uint16(i))
+		require.NoError(t, err)
+	}
+
+	_, err := bucket.GetPacket(make([]byte, MaxPktSize), uint16(3))
+	require.ErrorIs(t, err, ErrPacketTooOld)
+
+	require.Equal(t, 8, bucket.Grow())
+	require.Equal(t, 8, bucket.Capacity())
+
+	NextTestPackets := make([]*rtp.Packet, 8)
+	for i := 8; i < 16; i++ {
+		NextTestPackets[i-8] = &rtp.Packet{
+			Header: rtp.Header{
+				SequenceNumber: uint16(i),
+			},
+			Payload: []byte{byte(i)},
+		}
+	}
+
+	for _, p := range NextTestPackets {
+		buf, err := p.Marshal()
+		require.NoError(t, err)
+		_, err = bucket.AddPacket(buf)
+		require.NoError(t, err)
+	}
+
+	for i := 15; i >= 8; i-- {
+		buf := make([]byte, MaxPktSize)
+		_, err := bucket.GetPacket(buf, uint16(i))
+		require.NoError(t, err)
+	}
+}
+
 func TestQueueGrow(t *testing.T) {
 	TestPackets := []*rtp.Packet{
 		{
