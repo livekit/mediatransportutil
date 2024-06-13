@@ -54,7 +54,7 @@ func (b *Bucket) Grow() int {
 	// move wrapped slots to new slots
 	for i := b.maxSteps - 1; i >= b.step; i-- {
 		if binary.BigEndian.Uint16(b.slots[i]) != invalidPktSize {
-			growedSlots[i+b.initCapacity], b.slots[i] = b.slots[i], growedSlots[i+b.initCapacity]
+			growedSlots[i+b.initCapacity], growedSlots[i] = growedSlots[i], growedSlots[i+b.initCapacity]
 		}
 	}
 	b.slots = growedSlots
