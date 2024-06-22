@@ -139,8 +139,8 @@ func (b *Bucket) push(sn uint16, pkt []byte) ([]byte, error) {
 	b.invalidate(b.step, diff)
 
 	// store headSN packet
-	off := b.wrap(b.step + diff)
-	storedPkt := b.store(off, pkt)
+	idx := b.wrap(b.step + diff)
+	storedPkt := b.store(idx, pkt)
 
 	// for next packet
 	b.step = b.wrap(b.step + diff + 1)
@@ -159,8 +159,8 @@ func (b *Bucket) get(sn uint16) ([]byte, error) {
 		return nil, fmt.Errorf("%w, headSN %d, sn %d", ErrPacketTooOld, b.headSN, sn)
 	}
 
-	off := b.wrap(b.step - diff - 1)
-	slot := b.slots[off]
+	idx := b.wrap(b.step - diff - 1)
+	slot := b.slots[idx]
 	cacheSN := binary.BigEndian.Uint16(slot[pktSizeHeader+seqNumOffset:])
 	if cacheSN != sn {
 		return nil, fmt.Errorf("%w, headSN %d, sn %d, cacheSN %d", ErrPacketMismatch, b.headSN, sn, cacheSN)
@@ -171,7 +171,6 @@ func (b *Bucket) get(sn uint16) ([]byte, error) {
 		return nil, fmt.Errorf("%w, headSN %d, sn %d, size %d", ErrPacketSizeInvalid, b.headSN, sn, sz)
 	}
 
-	off += pktSizeHeader
 	return slot[pktSizeHeader : pktSizeHeader+int(sz)], nil
 }
 
@@ -181,14 +180,14 @@ func (b *Bucket) set(sn uint16, pkt []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w, headSN %d, sn %d", ErrPacketTooOld, b.headSN, sn)
 	}
 
-	off := b.wrap(b.step - diff - 1)
+	idx := b.wrap(b.step - diff - 1)
 
 	// Do not overwrite if duplicate
-	if binary.BigEndian.Uint16(b.slots[off][pktSizeHeader+seqNumOffset:]) == sn {
+	if binary.BigEndian.Uint16(b.slots[idx][pktSizeHeader+seqNumOffset:]) == sn {
 		return nil, ErrRTXPacket
 	}
 
-	return b.store(off, pkt), nil
+	return b.store(idx, pkt), nil
 }
 
 func (b *Bucket) store(idx int, pkt []byte) []byte {
@@ -220,8 +219,8 @@ func (b *Bucket) invalidate(startSlot int, numSlots int) {
 	}
 
 	for i := 0; i < numSlots; i++ {
-		off := b.wrap(startSlot + i)
-		binary.BigEndian.PutUint16(b.slots[off], invalidPktSize)
+		idx := b.wrap(startSlot + i)
+		binary.BigEndian.PutUint16(b.slots[idx], invalidPktSize)
 	}
 }
 
