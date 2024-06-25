@@ -161,14 +161,14 @@ func (b *Bucket) get(sn uint16) ([]byte, error) {
 
 	idx := b.wrap(b.step - diff - 1)
 	slot := b.slots[idx]
-	cacheSN := binary.BigEndian.Uint16(slot[pktSizeHeader+seqNumOffset:])
-	if cacheSN != sn {
-		return nil, fmt.Errorf("%w, headSN %d, sn %d, cacheSN %d", ErrPacketMismatch, b.headSN, sn, cacheSN)
-	}
-
 	sz := binary.BigEndian.Uint16(slot)
 	if sz == invalidPktSize {
 		return nil, fmt.Errorf("%w, headSN %d, sn %d, size %d", ErrPacketSizeInvalid, b.headSN, sn, sz)
+	}
+
+	cacheSN := binary.BigEndian.Uint16(slot[pktSizeHeader+seqNumOffset:])
+	if cacheSN != sn {
+		return nil, fmt.Errorf("%w, headSN %d, sn %d, cacheSN %d", ErrPacketMismatch, b.headSN, sn, cacheSN)
 	}
 
 	return slot[pktSizeHeader : pktSizeHeader+int(sz)], nil
@@ -181,10 +181,21 @@ func (b *Bucket) set(sn uint16, pkt []byte) ([]byte, error) {
 	}
 
 	idx := b.wrap(b.step - diff - 1)
+	slot := b.slots[idx]
+	size := binary.BigEndian.Uint16(slot)
+	if size != invalidPktSize {
+		// Do not overwrite if duplicate
+		if int(size) != len(pkt) {
+			return nil, fmt.Errorf("%w, incorrect RTX size, expected %d, actual %d", ErrRTXPacketSize, size, len(pkt))
+		}
 
-	// Do not overwrite if duplicate
-	if binary.BigEndian.Uint16(b.slots[idx][pktSizeHeader+seqNumOffset:]) == sn {
-		return nil, ErrRTXPacket
+		storedSN := binary.BigEndian.Uint16(slot[pktSizeHeader+seqNumOffset:])
+		if storedSN == sn {
+			return nil, ErrRTXPacket
+		}
+
+		// packet is valid, but has a different sequence number
+		return nil, fmt.Errorf("%w, expected %d, actual: %d", ErrPacketMismatch, storedSN, sn)
 	}
 
 	return b.store(idx, pkt), nil
