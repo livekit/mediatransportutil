@@ -15,6 +15,7 @@
 package bucket
 
 import (
+	"encoding/binary"
 	"errors"
 	"testing"
 
@@ -88,7 +89,7 @@ func TestQueue(t *testing.T) {
 	}
 	buf, err := np2.Marshal()
 	require.NoError(t, err)
-	_, err = q.AddPacket(buf)
+	storedPkt, err := q.AddPacket(buf)
 	require.NoError(t, err)
 	expectedSN = 8
 	i, err = q.GetPacket(buff, expectedSN)
@@ -98,6 +99,20 @@ func TestQueue(t *testing.T) {
 	require.Equal(t, expectedSN, np.SequenceNumber)
 
 	// adding a duplicate should not add and return retransmitted packet error
+	_, err = q.AddPacket(buf)
+	require.ErrorIs(t, err, ErrRTXPacket)
+
+	// adding a duplicate with incorrect size should return rtx size error
+	_, err = q.AddPacket(buf[:len(buf)-1])
+	require.ErrorIs(t, err, ErrRTXPacketSize)
+
+	// mangle the sequence number of a duplicate inside the bucket, should return mismatch error
+	storedSN := binary.BigEndian.Uint16(storedPkt[seqNumOffset:])
+	binary.BigEndian.PutUint16(storedPkt[seqNumOffset:], storedSN-1)
+	_, err = q.AddPacket(buf)
+	require.ErrorIs(t, err, ErrPacketMismatch)
+	// restore and ensure that RTX error is returned
+	binary.BigEndian.PutUint16(storedPkt[seqNumOffset:], storedSN)
 	_, err = q.AddPacket(buf)
 	require.ErrorIs(t, err, ErrRTXPacket)
 
@@ -148,7 +163,7 @@ func TestQueue(t *testing.T) {
 	// it should have been overwritten
 	expectedSN = TestPackets[2].Header.SequenceNumber
 	_, err = q.GetPacket(buff, expectedSN)
-	require.ErrorIs(t, err, ErrPacketMismatch)
+	require.ErrorIs(t, err, ErrPacketSizeInvalid)
 
 	// should be able to get overridden sequence number
 	expectedSN = 5

@@ -21,6 +21,7 @@ var (
 	ErrPacketTooOld      = errors.New("received packet too old")
 	ErrPacketTooNew      = errors.New("received packet too new")
 	ErrRTXPacket         = errors.New("packet already received")
+	ErrRTXPacketSize     = errors.New("packet already received, size mismatch")
 	ErrPacketMismatch    = errors.New("sequence number mismatch")
 	ErrPacketSizeInvalid = errors.New("invalid size")
 	ErrPacketTooLarge    = errors.New("packet too large")
