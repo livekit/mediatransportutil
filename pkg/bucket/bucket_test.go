@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQueue(t *testing.T) {
+func testQueue[T uint16 | uint32 | uint64](t *testing.T, q *Bucket[T]) {
 	TestPackets := []*rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -57,14 +57,12 @@ func TestQueue(t *testing.T) {
 		},
 	}
 
-	q := NewBucket(10)
-
 	for _, p := range TestPackets {
 		buf, err := p.Marshal()
 		require.NoError(t, err)
 		require.NotPanics(t, func() {
 			_, _ = q.AddPacket(buf)
-			require.Equal(t, p.Header.SequenceNumber, q.HeadSequenceNumber())
+			require.Equal(t, T(p.Header.SequenceNumber), q.HeadSequenceNumber())
 		})
 	}
 
@@ -72,14 +70,14 @@ func TestQueue(t *testing.T) {
 	_, err := q.AddPacket(pktToolarge)
 	require.ErrorIs(t, err, ErrPacketTooLarge)
 
-	expectedSN := uint16(6)
+	expectedSN := T(6)
 	np := rtp.Packet{}
 	buff := make([]byte, MaxPktSize)
 	i, err := q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// add an out-of-order packet and ensure it can be retrieved
 	np2 := &rtp.Packet{
@@ -96,7 +94,7 @@ func TestQueue(t *testing.T) {
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// adding a duplicate should not add and return retransmitted packet error
 	_, err = q.AddPacket(buf)
@@ -132,7 +130,7 @@ func TestQueue(t *testing.T) {
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// adding a packet will resync and invalidate all existing
 	buf, err = TestPackets[1].Marshal()
@@ -145,12 +143,12 @@ func TestQueue(t *testing.T) {
 	require.ErrorIs(t, err, ErrPacketTooNew)
 
 	// getting a packet added after resync should succeed
-	expectedSN = TestPackets[1].Header.SequenceNumber
+	expectedSN = T(TestPackets[1].Header.SequenceNumber)
 	i, err = q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// adding a packet with sequence number override
 	buf, err = TestPackets[2].Marshal()
@@ -161,7 +159,7 @@ func TestQueue(t *testing.T) {
 
 	// should not be able to get sequence number 4 that was in the packet that was given to the bucket
 	// it should have been overwritten
-	expectedSN = TestPackets[2].Header.SequenceNumber
+	expectedSN = T(TestPackets[2].Header.SequenceNumber)
 	_, err = q.GetPacket(buff, expectedSN)
 	require.ErrorIs(t, err, ErrPacketSizeInvalid)
 
@@ -171,10 +169,16 @@ func TestQueue(t *testing.T) {
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 }
 
-func TestQueueEdges(t *testing.T) {
+func TestQueue(t *testing.T) {
+	testQueue(t, NewBucket[uint16](10))
+	testQueue(t, NewBucket[uint32](10))
+	testQueue(t, NewBucket[uint64](10))
+}
+
+func testQueueEdges[T uint16 | uint32 | uint64](t *testing.T, q *Bucket[T]) {
 	TestPackets := []*rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -193,8 +197,6 @@ func TestQueueEdges(t *testing.T) {
 		},
 	}
 
-	q := NewBucket(16)
-
 	for _, p := range TestPackets {
 		require.NotPanics(t, func() {
 			buf, err := p.Marshal()
@@ -205,14 +207,14 @@ func TestQueueEdges(t *testing.T) {
 		})
 	}
 
-	expectedSN := uint16(65534)
+	expectedSN := T(65534)
 	np := rtp.Packet{}
 	buff := make([]byte, MaxPktSize)
 	i, err := q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// add an out-of-order packet where the head sequence has wrapped and ensure it can be retrieved
 	np2 := rtp.Packet{
@@ -227,10 +229,89 @@ func TestQueueEdges(t *testing.T) {
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN+1, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN)+1, np.SequenceNumber)
 }
 
-func TestQueueWrap(t *testing.T) {
+func TestQueueEdges(t *testing.T) {
+	testQueueEdges(t, NewBucket[uint16](10))
+	testQueueEdges(t, NewBucket[uint32](10))
+	testQueueEdges(t, NewBucket[uint64](10))
+}
+
+func TestQueueEdgesExtended(t *testing.T) {
+	TestPackets := []*rtp.Packet{
+		{
+			Header: rtp.Header{
+				SequenceNumber: 65533,
+			},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 65534,
+			},
+		},
+		{
+			Header: rtp.Header{
+				SequenceNumber: 2,
+			},
+		},
+	}
+
+	q := NewBucket[uint64](100)
+
+	for _, p := range TestPackets {
+		require.NotPanics(t, func() {
+			buf, err := p.Marshal()
+			require.NoError(t, err)
+			require.NotPanics(t, func() {
+				if p.Header.SequenceNumber < 32768 {
+					_, _ = q.AddPacketWithSequenceNumber(buf, uint64(p.Header.SequenceNumber)+65536)
+				} else {
+					_, _ = q.AddPacketWithSequenceNumber(buf, uint64(p.Header.SequenceNumber))
+				}
+			})
+		})
+	}
+
+	expectedSN := uint64(65534)
+	np := rtp.Packet{}
+	buff := make([]byte, MaxPktSize)
+	i, err := q.GetPacket(buff, expectedSN)
+	require.NoError(t, err)
+	err = np.Unmarshal(buff[:i])
+	require.NoError(t, err)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
+
+	// add an out-of-order packet where the head sequence has wrapped and ensure it can be retrieved
+	np2 := rtp.Packet{
+		Header: rtp.Header{
+			SequenceNumber: 65535,
+		},
+	}
+	buf, err := np2.Marshal()
+	require.NoError(t, err)
+	_, _ = q.AddPacketWithSequenceNumber(buf, uint64(np2.Header.SequenceNumber))
+
+	i, err = q.GetPacket(buff, expectedSN+1)
+	require.NoError(t, err)
+	err = np.Unmarshal(buff[:i])
+	require.NoError(t, err)
+	require.Equal(t, uint16(expectedSN)+1, np.SequenceNumber)
+
+	// wrap around should be linear in extended range (0/65536 and 1/65537 were not added)
+	_, err = q.GetPacket(buff, expectedSN+2)
+	require.Error(t, err, ErrPacketSizeInvalid)
+	_, err = q.GetPacket(buff, expectedSN+3)
+	require.Error(t, err, ErrPacketSizeInvalid)
+
+	i, err = q.GetPacket(buff, expectedSN+4)
+	require.NoError(t, err)
+	err = np.Unmarshal(buff[:i])
+	require.NoError(t, err)
+	require.Equal(t, uint16(expectedSN)+4, np.SequenceNumber)
+}
+
+func testQueueWrap[T uint16 | uint32 | uint64](t *testing.T, q *Bucket[T]) {
 	TestPackets := []*rtp.Packet{
 		{
 			Header: rtp.Header{
@@ -274,8 +355,6 @@ func TestQueueWrap(t *testing.T) {
 		},
 	}
 
-	q := NewBucket(10)
-
 	for _, p := range TestPackets {
 		buf, err := p.Marshal()
 		require.NoError(t, err)
@@ -294,13 +373,13 @@ func TestQueueWrap(t *testing.T) {
 	_, err = q.GetPacket(buff, 4)
 	require.ErrorIs(t, err, ErrPacketTooOld)
 
-	expectedSN := uint16(6)
+	expectedSN := T(6)
 	np := rtp.Packet{}
 	i, err := q.GetPacket(buff, expectedSN)
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// add an out-of-order packet and ensure it can be retrieved
 	np2 := &rtp.Packet{
@@ -317,7 +396,7 @@ func TestQueueWrap(t *testing.T) {
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// add a packet with a large gap in sequence number which will invalidate all the slots
 	np3 := &rtp.Packet{
@@ -334,7 +413,7 @@ func TestQueueWrap(t *testing.T) {
 	require.NoError(t, err)
 	err = np.Unmarshal(buff[:i])
 	require.NoError(t, err)
-	require.Equal(t, expectedSN, np.SequenceNumber)
+	require.Equal(t, uint16(expectedSN), np.SequenceNumber)
 
 	// after the large jump invalidating all slots, retrieving previously added packets should fail
 	_, err = q.GetPacket(buff, 6)
@@ -351,6 +430,12 @@ func TestQueueWrap(t *testing.T) {
 	require.ErrorIs(t, err, ErrPacketTooOld)
 }
 
+func TestQueueWrap(t *testing.T) {
+	testQueueWrap(t, NewBucket[uint16](10))
+	testQueueWrap(t, NewBucket[uint32](10))
+	testQueueWrap(t, NewBucket[uint64](10))
+}
+
 func TestGrowingFullBucket(t *testing.T) {
 	TestPackets := make([]*rtp.Packet, 8)
 	for i := 0; i < 8; i++ {
@@ -362,7 +447,7 @@ func TestGrowingFullBucket(t *testing.T) {
 		}
 	}
 
-	bucket := NewBucket(4)
+	bucket := NewBucket[uint16](4)
 
 	for _, p := range TestPackets {
 		buf, err := p.Marshal()
@@ -458,7 +543,7 @@ func TestQueueGrow(t *testing.T) {
 		},
 	}
 
-	q := NewBucket(10)
+	q := NewBucket[uint16](10)
 
 	for _, p := range TestPackets {
 		buf, err := p.Marshal()
