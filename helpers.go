@@ -20,6 +20,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/utils"
 	"github.com/pion/rtcp"
 )
 
@@ -116,4 +118,72 @@ func GetRttMs(report *rtcp.ReceptionReport, lastSRNTP NtpTime, lastSentAt time.T
 
 func GetRttMsFromReceiverReportOnly(report *rtcp.ReceptionReport) (uint32, error) {
 	return getRttMs(report, 0, time.Time{}, true)
+}
+
+// ------------------------------------------
+
+var (
+	ErrTimeNotSynced      = errors.New("time sync info hasn't been synchronized to source")
+	ErrTimeSyncIdMismatch = errors.New("unexpected ID in time sync response")
+)
+
+type TimeSyncInfo struct {
+	Id            string
+	SendTime      time.Time
+	ReceptionTime time.Time
+	PeerTime      time.Time
+
+	clock utils.Clock
+}
+
+func (s *TimeSyncInfo) StartTimeSync() livekit.TimeSyncRequest {
+	if s.clock == nil {
+		s.clock = utils.SystemClock{}
+	}
+
+	s.Id = utils.NewGuid("")
+
+	s.SendTime = s.clock.Now()
+	s.ReceptionTime = time.Time{}
+	s.PeerTime = time.Time{}
+
+	return livekit.TimeSyncRequest{
+		Id: s.Id,
+	}
+}
+
+func (s *TimeSyncInfo) HandleTimeSyncResponse(resp livekit.TimeSyncResponse) error {
+	if resp.Id != s.Id {
+		return ErrTimeSyncIdMismatch
+	}
+
+	s.ReceptionTime = s.clock.Now()
+	s.PeerTime = NtpTime(resp.NtpTime).Time()
+
+	return nil
+}
+
+func (s *TimeSyncInfo) GetPeerTimeForLocalTime(t time.Time) (time.Time, error) {
+	if s.SendTime.IsZero() || s.ReceptionTime.IsZero() || s.PeerTime.IsZero() {
+		return time.Time{}, ErrTimeNotSynced
+	}
+
+	latency := s.ReceptionTime.Sub(s.SendTime) / 2
+
+	clockOffset := s.PeerTime.Sub(s.ReceptionTime) + latency
+
+	return t.Add(clockOffset), nil
+}
+
+func HandleTimeSyncRequest(req livekit.TimeSyncRequest) livekit.TimeSyncResponse {
+	return handleTimeSyncRequestWithClock(utils.SystemClock{}, req)
+}
+
+func handleTimeSyncRequestWithClock(clock utils.Clock, req livekit.TimeSyncRequest) livekit.TimeSyncResponse {
+	now := ToNtpTime(clock.Now())
+
+	return livekit.TimeSyncResponse{
+		Id:      req.Id,
+		NtpTime: uint64(now),
+	}
 }
