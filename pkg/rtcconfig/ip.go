@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/stun"
+	"github.com/pion/stun/v3"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 
