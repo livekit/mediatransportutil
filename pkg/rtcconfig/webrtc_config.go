@@ -25,9 +25,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/ice/v2"
-	"github.com/pion/transport/v2/stdnet"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/ice/v4"
+	"github.com/pion/transport/v3/stdnet"
+	"github.com/pion/webrtc/v4"
 
 	"github.com/livekit/mediatransportutil/pkg/transport"
 	"github.com/livekit/protocol/logger"
