@@ -19,24 +19,21 @@ require (
 )
 
 require (
-	github.com/pion/dtls/v3 v3.0.4 // indirect
-	github.com/pion/mdns/v2 v2.0.7 // indirect
-	github.com/pion/srtp/v3 v3.0.4 // indirect
-	github.com/pion/turn/v4 v4.0.0 // indirect
-	github.com/wlynxg/anet v0.0.5 // indirect
-)
-
-require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gammazero/deque v0.2.1
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/pion/datachannel v1.5.9 // indirect
+	github.com/pion/dtls/v3 v3.0.4 // indirect
+	github.com/pion/mdns/v2 v2.0.7 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/sctp v1.8.34 // indirect
 	github.com/pion/sdp/v3 v3.0.9 // indirect
+	github.com/pion/srtp/v3 v3.0.4 // indirect
+	github.com/pion/turn/v4 v4.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
