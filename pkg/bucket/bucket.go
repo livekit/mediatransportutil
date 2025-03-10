@@ -124,6 +124,10 @@ func (b *Bucket[T]) AddPacketWithSequenceNumber(pkt []byte, sn T) ([]byte, error
 }
 
 func (b *Bucket[T]) GetPacket(buf []byte, sn T) (int, error) {
+	if b == nil {
+		return 0, ErrNoBucket
+	}
+
 	var (
 		p   []byte
 		err error

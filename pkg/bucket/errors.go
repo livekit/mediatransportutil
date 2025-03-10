@@ -17,6 +17,7 @@ package bucket
 import "errors"
 
 var (
+	ErrNoBucket          = errors.New("no bucket")
 	ErrBufferTooSmall    = errors.New("buffer too small")
 	ErrPacketTooOld      = errors.New("received packet too old")
 	ErrPacketTooNew      = errors.New("received packet too new")
