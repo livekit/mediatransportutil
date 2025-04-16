@@ -51,6 +51,8 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 		LoggerFactory: pionlogger.NewLoggerFactory(logger.GetLogger()),
 	}
 
+	s.SetSCTPMaxMessageSize(65535)
+
 	var ifFilter func(string) bool
 	if len(rtcConf.Interfaces.Includes) != 0 || len(rtcConf.Interfaces.Excludes) != 0 {
 		ifFilter = InterfaceFilterFromConf(rtcConf.Interfaces)
