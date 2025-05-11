@@ -6,7 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/gammazero/deque v1.0.0
-	github.com/livekit/protocol v1.38.1-0.20250511051327-eb5e002fe0bd
+	github.com/livekit/protocol v1.38.1-0.20250511053429-f8ea8179871e
 	github.com/pion/ice/v4 v4.0.8
 	github.com/pion/interceptor v0.1.37
 	github.com/pion/logging v0.2.3
