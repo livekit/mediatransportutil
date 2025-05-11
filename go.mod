@@ -26,6 +26,7 @@ require (
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
+	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731 // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
 	github.com/pion/dtls/v3 v3.0.4 // indirect
 	github.com/pion/mdns/v2 v2.0.7 // indirect
@@ -42,6 +43,7 @@ require (
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/sync v0.2.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 )
