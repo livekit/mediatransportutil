@@ -20,8 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/livekit/protocol/logger"
 	"gopkg.in/yaml.v3"
+
+	"github.com/livekit/protocol/logger"
 )
 
 const (
@@ -56,6 +57,11 @@ type RTCConfig struct {
 	// when UseExternalIP is true, only advertise the external IP to client
 	ExternalIPOnly bool          `yaml:"external_ip_only,omitempty"`
 	BatchIO        BatchIOConfig `yaml:"batch_io,omitempty"`
+
+	// SCTP congestion control
+	SCTPMinCwnd    int `yaml:"sctp_min_cwnd,omitempty"`
+	SCTPFastRtxWnd int `yaml:"sctp_fast_rtx_wnd,omitempty"`
+	SCTPCwndCAStep int `yaml:"sctp_cwnd_ca_step,omitempty"`
 
 	// for testing, disable UDP
 	ForceTCP bool `yaml:"force_tcp,omitempty"`

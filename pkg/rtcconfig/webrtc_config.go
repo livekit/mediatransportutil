@@ -53,6 +53,18 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 
 	s.SetSCTPMaxMessageSize(65535)
 
+	if rtcConf.SCTPMinCwnd > 0 {
+		s.SetSCTPMinCwnd(uint32(rtcConf.SCTPMinCwnd))
+	}
+
+	if rtcConf.SCTPFastRtxWnd > 0 {
+		s.SetSCTPFastRtxWnd(uint32(rtcConf.SCTPFastRtxWnd))
+	}
+
+	if rtcConf.SCTPCwndCAStep > 0 {
+		s.SetSCTPCwndCAStep(uint32(rtcConf.SCTPCwndCAStep))
+	}
+
 	var ifFilter func(string) bool
 	if len(rtcConf.Interfaces.Includes) != 0 || len(rtcConf.Interfaces.Excludes) != 0 {
 		ifFilter = InterfaceFilterFromConf(rtcConf.Interfaces)
