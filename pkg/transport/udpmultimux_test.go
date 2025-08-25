@@ -54,13 +54,13 @@ func TestMultiPortsUDPMux(t *testing.T) {
 		},
 	}
 
+	// Create a mux with different IP
 	mux3 := &mockUDPMux{
 		addrs: []net.Addr{
 			&net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 8000},
 		},
 	}
 
-	// Create a mux with different IP
 	mux4 := &mockUDPMux{
 		addrs: []net.Addr{
 			&net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 8001},
