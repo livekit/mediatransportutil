@@ -194,7 +194,7 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 	closeConns()
 	logger.Infow(
 		"found external IP via STUN",
-		"localAddr", localAddr.String(),
+		"localAddr", localAddr,
 		"stunServer", stunServer,
 		"externalIP", ipAddr,
 	)
