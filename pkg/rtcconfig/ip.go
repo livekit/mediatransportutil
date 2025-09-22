@@ -275,7 +275,7 @@ func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error
 	case <-validCh:
 		return nil
 	case <-ctx1.Done():
-		logger.Warnw("could not validate external IP", ctx1.Err(), "ip", nodeIP)
+		logger.Warnw("could not validate external IP", ctx1.Err(), "ip", nodeIP, "from", addr)
 		return ctx1.Err()
 	}
 }
