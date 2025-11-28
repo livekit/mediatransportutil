@@ -70,8 +70,8 @@ func NewBucket[ET number, T number](capacity int, maxPktSize int, seqNumOffset i
 	case maxPktSize < 65536:
 		b.pktSizeHeader = 2
 		b.invalidPktSize = uint64(0xffff)
-		b.putSize = puT6
-		b.getSize = geT6
+		b.putSize = put16
+		b.getSize = get16
 
 	case maxPktSize < 4294967296:
 		b.pktSizeHeader = 4
@@ -93,8 +93,8 @@ func NewBucket[ET number, T number](capacity int, maxPktSize int, seqNumOffset i
 		b.getSeqNum = get8
 
 	case 2:
-		b.putSeqNum = puT6
-		b.getSeqNum = geT6
+		b.putSeqNum = put16
+		b.getSeqNum = get16
 
 	case 4:
 		b.putSeqNum = put32
@@ -329,11 +329,11 @@ func get8(buf []byte) uint64 {
 	return uint64(buf[0])
 }
 
-func puT6(buf []byte, value uint64) {
+func put16(buf []byte, value uint64) {
 	binary.BigEndian.PutUint16(buf, uint16(value))
 }
 
-func geT6(buf []byte) uint64 {
+func get16(buf []byte) uint64 {
 	return uint64(binary.BigEndian.Uint16(buf))
 }
 
