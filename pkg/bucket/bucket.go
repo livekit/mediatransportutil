@@ -32,7 +32,6 @@ type number interface {
 type Bucket[ET number, T number] struct {
 	maxPktSize   int
 	seqNumOffset int
-	seqNumSize   int
 
 	pktSizeHeader  int
 	invalidPktSize uint64
