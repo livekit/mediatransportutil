@@ -173,7 +173,7 @@ func testQueue[ET number, T number](t *testing.T, q *Bucket[ET, T]) {
 }
 
 func TestQueue(t *testing.T) {
-	testQueue(t, NewBucket[uint16, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
+	testQueue(t, NewBucket[uint64, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueue(t, NewBucket[uint32, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueue(t, NewBucket[uint16, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 }
@@ -233,7 +233,7 @@ func testQueueEdges[ET number, T number](t *testing.T, q *Bucket[ET, T]) {
 }
 
 func TestQueueEdges(t *testing.T) {
-	testQueueEdges(t, NewBucket[uint16, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
+	testQueueEdges(t, NewBucket[uint64, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueueEdges(t, NewBucket[uint32, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueueEdges(t, NewBucket[uint16, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 }
@@ -431,7 +431,7 @@ func testQueueWrap[ET number, T number](t *testing.T, q *Bucket[ET, T]) {
 }
 
 func TestQueueWrap(t *testing.T) {
-	testQueueWrap(t, NewBucket[uint16, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
+	testQueueWrap(t, NewBucket[uint64, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueueWrap(t, NewBucket[uint32, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueueWrap(t, NewBucket[uint16, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 }
