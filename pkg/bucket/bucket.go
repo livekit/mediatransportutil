@@ -263,7 +263,7 @@ func (b *Bucket[ET, T]) set(sn ET, diff int, pkt []byte) ([]byte, error) {
 		}
 
 		storedSN := b.getSeqNum(slot[b.pktSizeHeader+b.seqNumOffset:])
-		if storedSN == uint64(sn) {
+		if T(storedSN) == T(sn) {
 			return nil, ErrRTXPacket
 		}
 
