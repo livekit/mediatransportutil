@@ -173,6 +173,8 @@ func testQueue[ET number, T number](t *testing.T, q *Bucket[ET, T]) {
 }
 
 func TestQueue(t *testing.T) {
+	require.Nil(t, NewBucket[uint64, uint16](10, 1024*1024, RTPSeqNumOffset))
+
 	testQueue(t, NewBucket[uint16, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueue(t, NewBucket[uint32, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
 	testQueue(t, NewBucket[uint64, uint16](10, RTPMaxPktSize, RTPSeqNumOffset))
