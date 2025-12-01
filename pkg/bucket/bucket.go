@@ -21,6 +21,8 @@ import (
 )
 
 const (
+	pktSizeLimit = 256 * 1024
+
 	RTPMaxPktSize   = 1500
 	RTPSeqNumOffset = 2
 )
@@ -51,6 +53,10 @@ type Bucket[ET number, T number] struct {
 }
 
 func NewBucket[ET number, T number](capacity int, maxPktSize int, seqNumOffset int) *Bucket[ET, T] {
+	if maxPktSize > pktSizeLimit {
+		return nil
+	}
+
 	var et ET
 	b := &Bucket[ET, T]{
 		maxPktSize:   maxPktSize,
@@ -73,17 +79,11 @@ func NewBucket[ET number, T number](capacity int, maxPktSize int, seqNumOffset i
 		b.putSize = put16
 		b.getSize = get16
 
-	case maxPktSize < 4294967296:
+	default:
 		b.pktSizeHeader = 4
 		b.invalidPktSize = uint64(0xffffffff)
 		b.putSize = put32
 		b.getSize = get32
-
-	default:
-		b.pktSizeHeader = 8
-		b.invalidPktSize = uint64(0xffffffffffffffff)
-		b.putSize = put64
-		b.getSize = get64
 	}
 
 	var t T
