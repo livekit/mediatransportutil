@@ -326,8 +326,8 @@ done:
 					"ignore", mapping.localIP)
 
 				if rtcConf.UseNodeIPAsExternalIP {
-					logger.Warnw("several local IP addresses were detected along with rtc.use_node_ip_as_external_ip, "+
-						"it may cause client's connection issues, from start to start the server, heisenbug-like, "+
+					logger.Warnw("several local IP addresses detected in rtc.use_node_ip_as_external_ip mode, "+
+						"depending on which one returned first, it may cause client connection issues, heisenbug-like, "+
 						"please consider filtering the IP addresses out via rtc.ips.excludes", nil)
 				}
 			} else {
