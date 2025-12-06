@@ -244,6 +244,11 @@ func iceServerForStunServers(servers []string) webrtc.ICEServer {
 }
 
 func getNAT1to1IPsForConf(rtcConf *RTCConfig, ipFilter func(net.IP) bool) ([]string, func(net.IP) bool, error) {
+	stunServers := rtcConf.STUNServers
+	if len(stunServers) == 0 {
+		stunServers = DefaultStunServers
+	}
+
 	localIPs, err := GetLocalIPAddresses(rtcConf.EnableLoopbackCandidate, nil)
 	if err != nil {
 		return nil, ipFilter, err
@@ -283,11 +288,6 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ipFilter func(net.IP) bool) ([]str
 			}
 
 			for _, port := range udpPorts {
-				stunServers := rtcConf.STUNServers
-				if len(stunServers) == 0 {
-					stunServers = DefaultStunServers
-				}
-
 				addr, err := GetExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port})
 				if err != nil {
 					if strings.Contains(err.Error(), "address already in use") {
