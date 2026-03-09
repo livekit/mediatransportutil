@@ -236,7 +236,7 @@ func (n *NodeIP) IsEmpty() bool {
 	return n.V4 == "" && n.V6 == ""
 }
 
-func (n *NodeIP) ToSlice() []string {
+func (n *NodeIP) ToStringSlice() []string {
 	var ips []string
 	if n.V4 != "" {
 		ips = append(ips, n.V4)

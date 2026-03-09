@@ -97,14 +97,14 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			s.SetIPFilter(ipFilter)
 			if len(ips) == 0 {
 				logger.Infow("no external IPs found, using node IP for NAT1To1Ips", "ip", rtcConf.NodeIP)
-				s.SetNAT1To1IPs(rtcConf.NodeIP.ToSlice(), webrtc.ICECandidateTypeHost)
+				s.SetNAT1To1IPs(rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost)
 			} else {
 				logger.Infow("using external IPs", "ips", ips)
 				s.SetNAT1To1IPs(ips, webrtc.ICECandidateTypeHost)
 			}
 			nat1to1IPs = ips
 		} else {
-			s.SetNAT1To1IPs(rtcConf.NodeIP.ToSlice(), webrtc.ICECandidateTypeHost)
+			s.SetNAT1To1IPs(rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost)
 		}
 	}
 
