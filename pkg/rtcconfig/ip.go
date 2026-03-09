@@ -54,14 +54,20 @@ func (conf *RTCConfig) determineIP() (string, error) {
 	}
 
 	// use local ip instead
-	addresses, err := GetLocalIPAddresses(false, nil)
+	addresses, err := GetLocalIPAddresses(false, true, nil)
 	if len(addresses) > 0 {
+		// prefer IPv4 address if available
+		for _, addr := range addresses {
+			if ip := net.ParseIP(addr); ip != nil && ip.To4() != nil {
+				return addr, err
+			}
+		}
 		return addresses[0], err
 	}
 	return "", err
 }
 
-func GetLocalIPAddresses(includeLoopback bool, preferredInterfaces []string) ([]string, error) {
+func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, preferredInterfaces []string) ([]string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -81,9 +87,17 @@ func GetLocalIPAddresses(includeLoopback bool, preferredInterfaces []string) ([]
 			var ip net.IP
 			switch typedAddr := addr.(type) {
 			case *net.IPNet:
-				ip = typedAddr.IP.To4()
+				if !includeV6 {
+					ip = typedAddr.IP.To4()
+				} else {
+					ip = typedAddr.IP
+				}
 			case *net.IPAddr:
-				ip = typedAddr.IP.To4()
+				if !includeV6 {
+					ip = typedAddr.IP.To4()
+				} else {
+					ip = typedAddr.IP
+				}
 			default:
 				continue
 			}
@@ -118,7 +132,7 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 	dialer := &net.Dialer{
 		LocalAddr: localAddr,
 	}
-	conn, err := dialer.Dial("udp4", stunServer)
+	conn, err := dialer.Dial("udp", stunServer)
 	if err != nil {
 		return "", err
 	}
@@ -156,10 +170,7 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 			stunErr = err
 			return
 		}
-		ip := xorAddr.IP.To4()
-		if ip != nil {
-			ipAddr = ip.String()
-		}
+		ipAddr = xorAddr.IP.String()
 	})
 	if err != nil {
 		closeConns()
