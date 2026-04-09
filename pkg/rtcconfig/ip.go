@@ -23,7 +23,6 @@ import (
 
 	"github.com/pion/stun/v3"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/slices"
 
 	"github.com/livekit/protocol/logger"
 )
@@ -54,7 +53,7 @@ func (conf *RTCConfig) determineIP() (string, error) {
 	}
 
 	// use local ip instead
-	addresses, err := GetLocalIPAddresses(false, true, nil)
+	addresses, err := GetLocalIPAddresses(false, true, nil, nil)
 	if len(addresses) > 0 {
 		// prefer IPv4 address if available
 		for _, addr := range addresses {
@@ -67,7 +66,7 @@ func (conf *RTCConfig) determineIP() (string, error) {
 	return "", err
 }
 
-func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, preferredInterfaces []string) ([]string, error) {
+func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, ifFilter func(string) bool, ipFilter func(net.IP) bool) ([]string, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
@@ -75,7 +74,7 @@ func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, preferredInterfac
 	loopBacks := make([]string, 0)
 	addresses := make([]string, 0)
 	for _, iface := range ifaces {
-		if len(preferredInterfaces) != 0 && !slices.Contains(preferredInterfaces, iface.Name) {
+		if ifFilter != nil && !ifFilter(iface.Name) {
 			continue
 		}
 
@@ -102,6 +101,12 @@ func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, preferredInterfac
 				continue
 			}
 			if ip == nil {
+				continue
+			}
+			if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+				continue
+			}
+			if ipFilter != nil && !ipFilter(ip) {
 				continue
 			}
 			if ip.IsLoopback() {
