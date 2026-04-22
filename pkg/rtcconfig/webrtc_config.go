@@ -97,14 +97,20 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			s.SetIPFilter(ipFilter)
 			if len(ips) == 0 {
 				logger.Infow("no external IPs found, using node IP for NAT1To1Ips", "ip", rtcConf.NodeIP)
-				s.SetNAT1To1IPs(rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost)
+				if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost); err != nil {
+					return nil, err
+				}
 			} else {
 				logger.Infow("using external IPs", "ips", ips)
-				s.SetNAT1To1IPs(ips, webrtc.ICECandidateTypeHost)
+				if err := SetNAT1To1AddressRewriteRules(&s, ips, webrtc.ICECandidateTypeHost); err != nil {
+					return nil, err
+				}
 			}
 			nat1to1IPs = ips
 		} else {
-			s.SetNAT1To1IPs(rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost)
+			if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -227,6 +233,32 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 		NAT1To1IPs:     nat1to1IPs,
 		UseMDNS:        rtcConf.UseMDNS,
 	}, nil
+}
+
+func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, candidateType webrtc.ICECandidateType) error {
+	rules := make([]webrtc.ICEAddressRewriteRule, 0, len(ips)+1)
+	catchAll := make([]string, 0, len(ips))
+
+	for _, ip := range ips {
+		if parts := strings.SplitN(ip, "/", 2); len(parts) == 2 {
+			rules = append(rules, webrtc.ICEAddressRewriteRule{
+				External:        []string{parts[0]},
+				Local:           parts[1],
+				AsCandidateType: candidateType,
+			})
+			catchAll = append(catchAll, parts[0])
+		} else {
+			catchAll = append(catchAll, ip)
+		}
+	}
+	if len(catchAll) > 0 {
+		rules = append(rules, webrtc.ICEAddressRewriteRule{
+			External:        catchAll,
+			AsCandidateType: candidateType,
+		})
+	}
+
+	return s.SetICEAddressRewriteRules(rules...)
 }
 
 func iceServerForStunServers(servers []string) webrtc.ICEServer {
