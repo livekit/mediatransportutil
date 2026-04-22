@@ -240,7 +240,7 @@ func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, candid
 	catchAll := make([]string, 0, len(ips))
 
 	for _, ip := range ips {
-		if parts := strings.SplitN(ip, "/", 2); len(parts) == 2 {
+		if parts := strings.Split(ip, "/"); len(parts) == 2 {
 			rules = append(rules, webrtc.ICEAddressRewriteRule{
 				External:        []string{parts[0]},
 				Local:           parts[1],
