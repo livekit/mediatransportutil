@@ -118,7 +118,7 @@ type PortRange struct {
 	End   int `yaml:"end,omitempty"`
 }
 
-func (r PortRange) MarshalYAML() (interface{}, error) {
+func (r PortRange) MarshalYAML() (any, error) {
 	if r.End == 0 {
 		return r.Start, nil
 	}
