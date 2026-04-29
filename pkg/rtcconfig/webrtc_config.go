@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"net"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -287,7 +288,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 	var udpPorts []int
 	if rtcConf.ICEPortRangeStart != 0 && rtcConf.ICEPortRangeEnd != 0 {
 		portRangeStart, portRangeEnd := uint16(rtcConf.ICEPortRangeStart), uint16(rtcConf.ICEPortRangeEnd)
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			udpPorts = append(udpPorts, rand.Intn(int(portRangeEnd-portRangeStart))+int(portRangeStart))
 		}
 	} else if rtcConf.UDPPort.Valid() {
@@ -401,20 +402,13 @@ func InterfaceFilterFromConf(ifs InterfacesConfig) func(string) bool {
 	return func(s string) bool {
 		// filter by include interfaces
 		if len(includes) > 0 {
-			for _, iface := range includes {
-				if iface == s {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(includes, s)
 		}
 
 		// filter by exclude interfaces
 		if len(excludes) > 0 {
-			for _, iface := range excludes {
-				if iface == s {
-					return false
-				}
+			if slices.Contains(excludes, s) {
+				return false
 			}
 		}
 		return true

@@ -39,7 +39,7 @@ func (conf *RTCConfig) determineIP() (string, error) {
 			stunServers = DefaultStunServers
 		}
 		var err error
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			var ip string
 			ip, err = GetExternalIP(context.Background(), stunServers, nil)
 			if err == nil {
