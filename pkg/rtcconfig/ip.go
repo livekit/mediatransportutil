@@ -131,6 +131,13 @@ func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, ifFilter func(str
 }
 
 func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) (string, error) {
+	return findExternalIPWithOptions(ctx, stunServer, localAddr, false)
+}
+
+// findExternalIPWithOptions is the internal entry point that lets callers
+// skip the post-STUN self-hairpin validation step. Skipping is appropriate
+// when the deployment topology cannot self-loopback to its own external IP.
+func findExternalIPWithOptions(ctx context.Context, stunServer string, localAddr net.Addr, skipValidation bool) (string, error) {
 	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout)
 	defer cancel1()
 
@@ -214,23 +221,38 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 		"stunServer", stunServer,
 		"externalIP", ipAddr,
 	)
+	if skipValidation {
+		return ipAddr, nil
+	}
 	return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
 }
 
 // GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
 // else the address will be used to validate the external IP is accessible from the outside.
 func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
+	return GetExternalIPWithOptions(ctx, stunServers, localAddr, false)
+}
+
+// GetExternalIPWithOptions is like GetExternalIP but allows callers to skip
+// the self-hairpin validation step. Skipping is appropriate when the LiveKit
+// server cannot loop back to its own external IP (e.g. hostNetwork on bare
+// metal with no NAT reflection at the edge firewall).
+func GetExternalIPWithOptions(ctx context.Context, stunServers []string, localAddr net.Addr, skipValidation bool) (string, error) {
 	if len(stunServers) == 0 {
 		return "", errors.New("STUN servers are required but not defined")
 	}
 
-	ctx1, cancel1 := context.WithTimeout(ctx, time.Duration(len(stunServers))*(stunPingTimeout+validationTimeout))
+	pingBudget := stunPingTimeout
+	if !skipValidation {
+		pingBudget += validationTimeout
+	}
+	ctx1, cancel1 := context.WithTimeout(ctx, time.Duration(len(stunServers))*pingBudget)
 	defer cancel1()
 
 	var err error
 	for _, ss := range stunServers {
 		var ipAddr string
-		ipAddr, err = findExternalIP(ctx1, ss, localAddr)
+		ipAddr, err = findExternalIPWithOptions(ctx1, ss, localAddr, skipValidation)
 		if err == nil {
 			return ipAddr, nil
 		}
