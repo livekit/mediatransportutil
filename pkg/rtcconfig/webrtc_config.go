@@ -103,8 +103,15 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 				}
 			} else {
 				logger.Infow("using external IPs", "ips", ips)
-				if err := SetNAT1To1AddressRewriteRules(&s, ips, webrtc.ICECandidateTypeHost); err != nil {
-					return nil, err
+				mode, candidateType := chooseNAT1To1Mode(rtcConf.AdvertisePrivateIPs, rtcConf.ExternalIPOnly, len(ips))
+				if mode == webrtc.ICEAddressRewriteAppend && candidateType == webrtc.ICECandidateTypeSrflx {
+					if err := SetNAT1To1AddressRewriteRulesAppendSrflx(&s, ips); err != nil {
+						return nil, err
+					}
+				} else {
+					if err := SetNAT1To1AddressRewriteRules(&s, ips, webrtc.ICECandidateTypeHost); err != nil {
+						return nil, err
+					}
 				}
 			}
 			nat1to1IPs = ips
@@ -237,15 +244,61 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 }
 
 func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, candidateType webrtc.ICECandidateType) error {
+	return s.SetICEAddressRewriteRules(buildNAT1To1Rules(ips, candidateType, defaultNAT1To1Mode(candidateType))...)
+}
+
+// SetNAT1To1AddressRewriteRulesAppendSrflx publishes ips as server-reflexive
+// candidates via Pion's append-mode rewrite rules, leaving any host candidates
+// (typically the private IP) intact. This is the wiring used when
+// AdvertisePrivateIPs is enabled.
+func SetNAT1To1AddressRewriteRulesAppendSrflx(s *webrtc.SettingEngine, ips []string) error {
+	return s.SetICEAddressRewriteRules(buildNAT1To1Rules(ips, webrtc.ICECandidateTypeSrflx, webrtc.ICEAddressRewriteAppend)...)
+}
+
+// chooseNAT1To1Mode picks the rewrite mode + candidate type for the discovered
+// external IPs. AdvertisePrivateIPs only takes effect when the operator did
+// not opt into ExternalIPOnly and STUN actually returned mappings.
+func chooseNAT1To1Mode(advertisePrivateIPs, externalIPOnly bool, externalMappingsCount int) (webrtc.ICEAddressRewriteMode, webrtc.ICECandidateType) {
+	if advertisePrivateIPs && !externalIPOnly && externalMappingsCount > 0 {
+		return webrtc.ICEAddressRewriteAppend, webrtc.ICECandidateTypeSrflx
+	}
+	return webrtc.ICEAddressRewriteReplace, webrtc.ICECandidateTypeHost
+}
+
+// defaultNAT1To1Mode preserves the legacy behavior of SetNAT1To1AddressRewriteRules
+// for callers that don't pass an explicit mode: replace for host candidates,
+// append for everything else.
+func defaultNAT1To1Mode(candidateType webrtc.ICECandidateType) webrtc.ICEAddressRewriteMode {
+	if candidateType == webrtc.ICECandidateTypeUnknown || candidateType == webrtc.ICECandidateTypeHost {
+		return webrtc.ICEAddressRewriteReplace
+	}
+	return webrtc.ICEAddressRewriteAppend
+}
+
+// buildNAT1To1Rules produces the rewrite-rule slice fed to Pion. The catch-all
+// rule (one entry per external IP, no Local) is always emitted regardless of
+// mode: pion's gatherCandidatesSrflxMapped opens its UDP socket on the
+// wildcard address (0.0.0.0), and rule lookup keyed on the wildcard local IP
+// must hit the catch-all to publish the right external IP. Without it, srflx
+// candidates fall back to publishing 0.0.0.0 as base address.
+//
+// Self-mappings (External == Local) are skipped in append mode because
+// publishing "<private> -> <private>" as srflx is meaningless and only
+// inflates ICE check overhead.
+func buildNAT1To1Rules(ips []string, candidateType webrtc.ICECandidateType, mode webrtc.ICEAddressRewriteMode) []webrtc.ICEAddressRewriteRule {
 	rules := make([]webrtc.ICEAddressRewriteRule, 0, len(ips)+1)
 	catchAll := make([]string, 0, len(ips))
 
 	for _, ip := range ips {
 		if parts := strings.Split(ip, "/"); len(parts) == 2 {
+			if mode == webrtc.ICEAddressRewriteAppend && parts[0] == parts[1] {
+				continue
+			}
 			rules = append(rules, webrtc.ICEAddressRewriteRule{
 				External:        []string{parts[0]},
 				Local:           parts[1],
 				AsCandidateType: candidateType,
+				Mode:            mode,
 			})
 			catchAll = append(catchAll, parts[0])
 		} else {
@@ -256,10 +309,11 @@ func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, candid
 		rules = append(rules, webrtc.ICEAddressRewriteRule{
 			External:        catchAll,
 			AsCandidateType: candidateType,
+			Mode:            mode,
 		})
 	}
 
-	return s.SetICEAddressRewriteRules(rules...)
+	return rules
 }
 
 func iceServerForStunServers(servers []string) webrtc.ICEServer {
