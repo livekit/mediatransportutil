@@ -84,14 +84,15 @@ func Test_nackQueue_pairs(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewNACKQueue(NackQueueParamsDefault)
-			for _, sn := range tt.args {
-				n.Push(sn)
+			for _, n := range []NackQueueInterface{NewNACKQueue(NackQueueParamsDefault), NewNACKQueueSafe(NackQueueParamsDefault)} {
+				for _, sn := range tt.args {
+					n.Push(sn)
+				}
+				time.Sleep(100 * time.Millisecond)
+				got, numSeqNumsNacked := n.Pairs()
+				require.EqualValues(t, tt.want.pairs, got)
+				require.Equal(t, tt.want.numSeqNumsNacked, numSeqNumsNacked)
 			}
-			time.Sleep(100 * time.Millisecond)
-			got, numSeqNumsNacked := n.Pairs()
-			require.EqualValues(t, tt.want.pairs, got)
-			require.Equal(t, tt.want.numSeqNumsNacked, numSeqNumsNacked)
 		})
 	}
 }
@@ -116,15 +117,16 @@ func Test_nackQueue_push(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewNACKQueue(NackQueueParamsDefault)
-			for _, sn := range tt.args.sn {
-				n.Push(sn)
+			for _, n := range []NackQueueInterface{NewNACKQueue(NackQueueParamsDefault), NewNACKQueueSafe(NackQueueParamsDefault)} {
+				for _, sn := range tt.args.sn {
+					n.Push(sn)
+				}
+				var newSN []uint16
+				for _, nack := range n.Nacks() {
+					newSN = append(newSN, nack.seqNum)
+				}
+				require.Equal(t, tt.want, newSN)
 			}
-			var newSN []uint16
-			for _, nack := range n.nacks {
-				newSN = append(newSN, nack.seqNum)
-			}
-			require.Equal(t, tt.want, newSN)
 		})
 	}
 }
@@ -149,16 +151,17 @@ func Test_nackQueue_remove(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			n := NewNACKQueue(NackQueueParamsDefault)
-			for _, sn := range tt.args.sn {
-				n.Push(sn)
+			for _, n := range []NackQueueInterface{NewNACKQueue(NackQueueParamsDefault), NewNACKQueueSafe(NackQueueParamsDefault)} {
+				for _, sn := range tt.args.sn {
+					n.Push(sn)
+				}
+				n.Remove(5)
+				var newSN []uint16
+				for _, nack := range n.Nacks() {
+					newSN = append(newSN, nack.seqNum)
+				}
+				require.Equal(t, tt.want, newSN)
 			}
-			n.Remove(5)
-			var newSN []uint16
-			for _, nack := range n.nacks {
-				newSN = append(newSN, nack.seqNum)
-			}
-			require.Equal(t, tt.want, newSN)
 		})
 	}
 }
