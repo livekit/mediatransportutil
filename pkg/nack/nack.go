@@ -16,6 +16,7 @@ package nack
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/pion/rtcp"
@@ -32,6 +33,14 @@ const (
 
 	rttSmoothingFactor = float64(0.75) // use 75% of new value
 )
+
+type NackQueueInterface interface {
+	SetRTT(rtt uint32)
+	Remove(sn uint16)
+	Push(sn uint16)
+	Pairs() ([]rtcp.NackPair, int)
+	Nacks() []*nack // for testing only
+}
 
 type NackQueueParams struct {
 	DefaultRtt    uint32
@@ -53,6 +62,8 @@ var NackQueueParamsDefault = NackQueueParams{
 	MaxLifetime:   maxLifetime,
 }
 
+var _ NackQueueInterface = (*NackQueue)(nil)
+
 type NackQueue struct {
 	params     NackQueueParams
 	nackParams nackParams
@@ -61,7 +72,7 @@ type NackQueue struct {
 	rtt   uint32
 }
 
-func NewNACKQueue(params NackQueueParams) *NackQueue {
+func NewNACKQueue(params NackQueueParams) NackQueueInterface {
 	return &NackQueue{
 		params: params,
 		nackParams: nackParams{
@@ -165,6 +176,55 @@ func (n *NackQueue) Pairs() ([]rtcp.NackPair, int) {
 	}
 
 	return nps, numSeqNumsNacked
+}
+
+func (n *NackQueue) Nacks() []*nack {
+	return n.nacks
+}
+
+// -----------------------------------------------------------------
+
+var _ NackQueueInterface = (*NackQueueSafe)(nil)
+
+type NackQueueSafe struct {
+	lock sync.Mutex
+	NackQueueInterface
+}
+
+func NewNACKQueueSafe(params NackQueueParams) NackQueueInterface {
+	return &NackQueueSafe{
+		NackQueueInterface: NewNACKQueue(params),
+	}
+}
+
+func (n *NackQueueSafe) SetRTT(rtt uint32) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	n.NackQueueInterface.SetRTT(rtt)
+}
+
+func (n *NackQueueSafe) Remove(sn uint16) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	n.NackQueueInterface.Remove(sn)
+}
+
+func (n *NackQueueSafe) Push(sn uint16) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	n.NackQueueInterface.Push(sn)
+}
+
+func (n *NackQueueSafe) Pairs() ([]rtcp.NackPair, int) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	return n.NackQueueInterface.Pairs()
+}
+
+func (n *NackQueueSafe) Nacks() []*nack {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	return n.NackQueueInterface.Nacks()
 }
 
 // -----------------------------------------------------------------
