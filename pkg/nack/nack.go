@@ -62,9 +62,9 @@ var NackQueueParamsDefault = NackQueueParams{
 	MaxLifetime:   maxLifetime,
 }
 
-var _ NackQueueInterface = (*NackQueue)(nil)
+var _ NackQueueInterface = (*nackQueue)(nil)
 
-type NackQueue struct {
+type nackQueue struct {
 	params     NackQueueParams
 	nackParams nackParams
 
@@ -73,7 +73,7 @@ type NackQueue struct {
 }
 
 func NewNACKQueue(params NackQueueParams) NackQueueInterface {
-	return &NackQueue{
+	return &nackQueue{
 		params: params,
 		nackParams: nackParams{
 			maxTries:      params.MaxTries,
@@ -87,7 +87,7 @@ func NewNACKQueue(params NackQueueParams) NackQueueInterface {
 	}
 }
 
-func (n *NackQueue) SetRTT(rtt uint32) {
+func (n *nackQueue) SetRTT(rtt uint32) {
 	if rtt == 0 {
 		n.rtt = n.params.DefaultRtt
 	} else {
@@ -99,7 +99,7 @@ func (n *NackQueue) SetRTT(rtt uint32) {
 	}
 }
 
-func (n *NackQueue) Remove(sn uint16) {
+func (n *nackQueue) Remove(sn uint16) {
 	for idx, nack := range n.nacks {
 		if nack.seqNum != sn {
 			continue
@@ -111,7 +111,7 @@ func (n *NackQueue) Remove(sn uint16) {
 	}
 }
 
-func (n *NackQueue) Push(sn uint16) {
+func (n *nackQueue) Push(sn uint16) {
 	// if at capacity, pop the first one
 	if len(n.nacks) == cap(n.nacks) {
 		copy(n.nacks[0:], n.nacks[1:])
@@ -121,7 +121,7 @@ func (n *NackQueue) Push(sn uint16) {
 	n.nacks = append(n.nacks, newNack(&n.nackParams, sn))
 }
 
-func (n *NackQueue) Pairs() ([]rtcp.NackPair, int) {
+func (n *nackQueue) Pairs() ([]rtcp.NackPair, int) {
 	if len(n.nacks) == 0 {
 		return nil, 0
 	}
@@ -178,50 +178,50 @@ func (n *NackQueue) Pairs() ([]rtcp.NackPair, int) {
 	return nps, numSeqNumsNacked
 }
 
-func (n *NackQueue) Nacks() []*nack {
+func (n *nackQueue) Nacks() []*nack {
 	return n.nacks
 }
 
 // -----------------------------------------------------------------
 
-var _ NackQueueInterface = (*NackQueueSafe)(nil)
+var _ NackQueueInterface = (*nackQueueSafe)(nil)
 
-type NackQueueSafe struct {
+type nackQueueSafe struct {
 	lock sync.Mutex
 	NackQueueInterface
 }
 
 func NewNACKQueueSafe(params NackQueueParams) NackQueueInterface {
-	return &NackQueueSafe{
+	return &nackQueueSafe{
 		NackQueueInterface: NewNACKQueue(params),
 	}
 }
 
-func (n *NackQueueSafe) SetRTT(rtt uint32) {
+func (n *nackQueueSafe) SetRTT(rtt uint32) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	n.NackQueueInterface.SetRTT(rtt)
 }
 
-func (n *NackQueueSafe) Remove(sn uint16) {
+func (n *nackQueueSafe) Remove(sn uint16) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	n.NackQueueInterface.Remove(sn)
 }
 
-func (n *NackQueueSafe) Push(sn uint16) {
+func (n *nackQueueSafe) Push(sn uint16) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	n.NackQueueInterface.Push(sn)
 }
 
-func (n *NackQueueSafe) Pairs() ([]rtcp.NackPair, int) {
+func (n *nackQueueSafe) Pairs() ([]rtcp.NackPair, int) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	return n.NackQueueInterface.Pairs()
 }
 
-func (n *NackQueueSafe) Nacks() []*nack {
+func (n *nackQueueSafe) Nacks() []*nack {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	return n.NackQueueInterface.Nacks()
