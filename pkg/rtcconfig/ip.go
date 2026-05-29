@@ -130,7 +130,7 @@ func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, ifFilter func(str
 	return nil, fmt.Errorf("could not find local IP address")
 }
 
-func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) (string, error) {
+func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr, validate bool) (string, error) {
 	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout)
 	defer cancel1()
 
@@ -213,13 +213,21 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr) 
 		"localAddr", localAddr,
 		"stunServer", stunServer,
 		"externalIP", ipAddr,
+		"validateExternalIP", validate,
 	)
+	if !validate {
+		return ipAddr, nil
+	}
 	return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
 }
 
 // GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
 // else the address will be used to validate the external IP is accessible from the outside.
 func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
+	return getExternalIP(ctx, stunServers, localAddr, true)
+}
+
+func getExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool) (string, error) {
 	if len(stunServers) == 0 {
 		return "", errors.New("STUN servers are required but not defined")
 	}
@@ -230,7 +238,7 @@ func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 	var err error
 	for _, ss := range stunServers {
 		var ipAddr string
-		ipAddr, err = findExternalIP(ctx1, ss, localAddr)
+		ipAddr, err = findExternalIP(ctx1, ss, localAddr, validate)
 		if err == nil {
 			return ipAddr, nil
 		}
