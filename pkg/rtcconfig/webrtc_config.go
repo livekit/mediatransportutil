@@ -98,18 +98,18 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			s.SetIPFilter(ipFilter)
 			if len(ips) == 0 {
 				logger.Infow("no external IPs found, using node IP for NAT1To1Ips", "ip", rtcConf.NodeIP)
-				if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost); err != nil {
+				if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), false); err != nil {
 					return nil, err
 				}
 			} else {
-				logger.Infow("using external IPs", "ips", ips)
-				if err := SetNAT1To1AddressRewriteRules(&s, ips, webrtc.ICECandidateTypeHost); err != nil {
+				logger.Infow("using external IPs", "ips", ips, "advertiseInternalIP", rtcConf.AdvertiseInternalIP)
+				if err := SetNAT1To1AddressRewriteRules(&s, ips, rtcConf.AdvertiseInternalIP); err != nil {
 					return nil, err
 				}
 			}
 			nat1to1IPs = ips
 		} else {
-			if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), webrtc.ICECandidateTypeHost); err != nil {
+			if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), false); err != nil {
 				return nil, err
 			}
 		}
@@ -236,18 +236,22 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 	}, nil
 }
 
-func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, candidateType webrtc.ICECandidateType) error {
+func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, includeInternal bool) error {
 	rules := make([]webrtc.ICEAddressRewriteRule, 0, len(ips)+1)
 	catchAll := make([]string, 0, len(ips))
 
+	mode := webrtc.ICEAddressRewriteModeUnspecified
+	if includeInternal {
+		mode = webrtc.ICEAddressRewriteAppend
+	}
 	for _, ip := range ips {
 		if parts := strings.Split(ip, "/"); len(parts) == 2 {
 			rules = append(rules, webrtc.ICEAddressRewriteRule{
 				External:        []string{parts[0]},
 				Local:           parts[1],
-				AsCandidateType: candidateType,
+				AsCandidateType: webrtc.ICECandidateTypeHost,
+				Mode:            mode,
 			})
-			catchAll = append(catchAll, parts[0])
 		} else {
 			catchAll = append(catchAll, ip)
 		}
@@ -255,7 +259,7 @@ func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, candid
 	if len(catchAll) > 0 {
 		rules = append(rules, webrtc.ICEAddressRewriteRule{
 			External:        catchAll,
-			AsCandidateType: candidateType,
+			AsCandidateType: webrtc.ICECandidateTypeHost,
 		})
 	}
 
@@ -304,7 +308,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 		go func(localIP string) {
 			defer wg.Done()
 			for _, port := range udpPorts {
-				addr, err := GetExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port})
+				addr, err := getExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port}, !rtcConf.SkipExternalIPValidation)
 				if err != nil {
 					if strings.Contains(err.Error(), "address already in use") {
 						logger.Infow("failed to get external ip, address already in use", "local", localIP, "port", port)
