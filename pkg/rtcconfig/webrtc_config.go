@@ -202,6 +202,19 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 	}
 	s.SetNetworkTypes(networkTypes)
 
+	if rtcConf.HostAcceptanceMinWait > 0 {
+		s.SetHostAcceptanceMinWait(rtcConf.HostAcceptanceMinWait)
+	}
+	if rtcConf.SrflxAcceptanceMinWait > 0 {
+		s.SetSrflxAcceptanceMinWait(rtcConf.SrflxAcceptanceMinWait)
+	}
+	if rtcConf.PrflxAcceptanceMinWait > 0 {
+		s.SetPrflxAcceptanceMinWait(rtcConf.PrflxAcceptanceMinWait)
+	}
+	if rtcConf.RelayAcceptanceMinWait > 0 {
+		s.SetRelayAcceptanceMinWait(rtcConf.RelayAcceptanceMinWait)
+	}
+
 	if rtcConf.EnableLoopbackCandidate {
 		s.SetIncludeLoopbackCandidate(true)
 	}

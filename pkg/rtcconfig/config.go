@@ -67,6 +67,12 @@ type RTCConfig struct {
 	SCTPFastRtxWnd int `yaml:"sctp_fast_rtx_wnd,omitempty"`
 	SCTPCwndCAStep int `yaml:"sctp_cwnd_ca_step,omitempty"`
 
+	// ICE candidate-pair acceptance min-waits; 0 keeps pion's default
+	HostAcceptanceMinWait  time.Duration `yaml:"host_acceptance_min_wait,omitempty"`
+	SrflxAcceptanceMinWait time.Duration `yaml:"srflx_acceptance_min_wait,omitempty"`
+	PrflxAcceptanceMinWait time.Duration `yaml:"prflx_acceptance_min_wait,omitempty"`
+	RelayAcceptanceMinWait time.Duration `yaml:"relay_acceptance_min_wait,omitempty"`
+
 	// for testing, disable UDP
 	ForceTCP bool `yaml:"force_tcp,omitempty"`
 }
