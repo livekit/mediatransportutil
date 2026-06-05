@@ -16,13 +16,13 @@ package rtcconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/pion/stun/v3"
-	"github.com/pkg/errors"
 
 	"github.com/livekit/protocol/logger"
 )
@@ -49,7 +49,7 @@ func (conf *RTCConfig) determineIP() (string, error) {
 			}
 		}
 		logger.Warnw("could not resolve external IP", err)
-		return "", errors.Errorf("could not resolve external IP: %v", err)
+		return "", fmt.Errorf("could not resolve external IP: %w", err)
 	}
 
 	// use local ip instead
