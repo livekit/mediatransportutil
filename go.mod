@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/gammazero/deque v1.2.1
-	github.com/livekit/protocol v1.46.6-0.20260605181725-7f0893ab5bf2
+	github.com/livekit/protocol v1.46.7-0.20260605212020-c0615a2f6f84
 	github.com/pion/ice/v4 v4.2.7
 	github.com/pion/interceptor v0.1.45
 	github.com/pion/logging v0.2.4
