@@ -321,7 +321,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 		go func(localIP string) {
 			defer wg.Done()
 			for _, port := range udpPorts {
-				addr, err := getExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port}, !rtcConf.SkipExternalIPValidation)
+				addr, err := getExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port}, !rtcConf.SkipExternalIPValidation, "udp")
 				if err != nil {
 					if strings.Contains(err.Error(), "address already in use") {
 						logger.Infow("failed to get external ip, address already in use", "local", localIP, "port", port)
