@@ -38,10 +38,17 @@ func (conf *RTCConfig) determineIP() (string, error) {
 		if len(stunServers) == 0 {
 			stunServers = DefaultStunServers
 		}
+		// When an IPv4 is required, dial STUN over udp4 so a not-yet-attached IPv4
+		// surfaces as an error (and is retried) instead of the request silently
+		// resolving the node's IPv6.
+		getIP := GetExternalIP
+		if conf.RequireIPv4 {
+			getIP = GetExternalIPv4
+		}
 		var err error
 		for range 3 {
 			var ip string
-			ip, err = GetExternalIP(context.Background(), stunServers, nil)
+			ip, err = getIP(context.Background(), stunServers, nil)
 			if err == nil {
 				return ip, nil
 			} else {
@@ -54,13 +61,16 @@ func (conf *RTCConfig) determineIP() (string, error) {
 
 	// use local ip instead
 	addresses, err := GetLocalIPAddresses(false, true, nil, nil)
-	if len(addresses) > 0 {
-		// prefer IPv4 address if available
-		for _, addr := range addresses {
-			if ip := net.ParseIP(addr); ip != nil && ip.To4() != nil {
-				return addr, err
-			}
+	// prefer IPv4 address if available
+	for _, addr := range addresses {
+		if ip := net.ParseIP(addr); ip != nil && ip.To4() != nil {
+			return addr, err
 		}
+	}
+	if conf.RequireIPv4 {
+		return "", fmt.Errorf("no IPv4 address available")
+	}
+	if len(addresses) > 0 {
 		return addresses[0], err
 	}
 	return "", err
@@ -130,14 +140,14 @@ func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, ifFilter func(str
 	return nil, fmt.Errorf("could not find local IP address")
 }
 
-func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr, validate bool) (string, error) {
+func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr, validate bool, network string) (string, error) {
 	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout)
 	defer cancel1()
 
 	dialer := &net.Dialer{
 		LocalAddr: localAddr,
 	}
-	conn, err := dialer.Dial("udp", stunServer)
+	conn, err := dialer.Dial(network, stunServer)
 	if err != nil {
 		return "", err
 	}
@@ -224,10 +234,16 @@ func findExternalIP(ctx context.Context, stunServer string, localAddr net.Addr, 
 // GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
 // else the address will be used to validate the external IP is accessible from the outside.
 func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
-	return getExternalIP(ctx, stunServers, localAddr, true)
+	return getExternalIP(ctx, stunServers, localAddr, true, "udp")
 }
 
-func getExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool) (string, error) {
+// GetExternalIPv4 is like GetExternalIP but forces the STUN request over IPv4, so
+// it returns an IPv4 reflexive address (or an error if no IPv4 route exists).
+func GetExternalIPv4(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
+	return getExternalIP(ctx, stunServers, localAddr, true, "udp4")
+}
+
+func getExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool, network string) (string, error) {
 	if len(stunServers) == 0 {
 		return "", errors.New("STUN servers are required but not defined")
 	}
@@ -238,7 +254,7 @@ func getExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 	var err error
 	for _, ss := range stunServers {
 		var ipAddr string
-		ipAddr, err = findExternalIP(ctx1, ss, localAddr, validate)
+		ipAddr, err = findExternalIP(ctx1, ss, localAddr, validate, network)
 		if err == nil {
 			return ipAddr, nil
 		}
