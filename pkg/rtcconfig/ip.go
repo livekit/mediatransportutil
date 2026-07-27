@@ -30,6 +30,9 @@ import (
 const (
 	stunPingTimeout   = 5 * time.Second
 	validationTimeout = 5 * time.Second
+
+	DefaultExternalIPTimeout = 30 * time.Second
+	externalIPRetryInterval  = 500 * time.Millisecond
 )
 
 func (conf *RTCConfig) determineIP() (string, error) {
@@ -38,15 +41,20 @@ func (conf *RTCConfig) determineIP() (string, error) {
 		if len(stunServers) == 0 {
 			stunServers = DefaultStunServers
 		}
+		timeout := conf.ExternalIPTimeout
+		if timeout <= 0 {
+			timeout = DefaultExternalIPTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
 		var err error
-		for range 3 {
+		for ctx.Err() == nil {
 			var ip string
-			ip, err = GetExternalIP(context.Background(), stunServers, nil)
-			if err == nil {
+			if ip, err = GetExternalIP(ctx, stunServers, nil); err == nil {
 				return ip, nil
-			} else {
-				time.Sleep(500 * time.Millisecond)
 			}
+			time.Sleep(externalIPRetryInterval)
 		}
 		logger.Warnw("could not resolve external IP", err)
 		return "", fmt.Errorf("could not resolve external IP: %w", err)
