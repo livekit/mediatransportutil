@@ -97,8 +97,8 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			ipFilter = newFilter
 			s.SetIPFilter(ipFilter)
 			if len(ips) == 0 {
-				logger.Infow("no external IPs found, using node IP for NAT1To1Ips", "ip", rtcConf.NodeIP)
-				if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), false); err != nil {
+				logger.Infow("no external IPs found, using node IP for NAT1To1Ips", "ip", rtcConf.NodeIP, "advertiseInternalIP", rtcConf.AdvertiseInternalIP)
+				if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), rtcConf.AdvertiseInternalIP); err != nil {
 					return nil, err
 				}
 			} else {
@@ -109,7 +109,21 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			}
 			nat1to1IPs = ips
 		} else {
-			if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), false); err != nil {
+			// AdvertiseInternalIP previously wasn't threaded through here, so
+			// setting rtc.node_ip manually (use_external_ip: false) always
+			// REPLACED host candidates with node_ip instead of keeping the
+			// original alongside it (pion/webrtc: NAT1-to-1 rewrite with
+			// Mode unspecified defaults to Replace for host candidates;
+			// ICEAddressRewriteAppend keeps both). That's fine when node_ip
+			// is reachable from everywhere, but breaks same-network peers
+			// when node_ip is only reachable from outside (e.g. a node
+			// behind a NAT/load balancer that isn't itself reachable via
+			// that address) — those peers lose their only working
+			// candidate. AdvertiseInternalIP already exists in config
+			// specifically to avoid this; it just wasn't respected in this
+			// branch.
+			logger.Infow("using explicit node IP for NAT1To1Ips", "ip", rtcConf.NodeIP, "advertiseInternalIP", rtcConf.AdvertiseInternalIP)
+			if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), rtcConf.AdvertiseInternalIP); err != nil {
 				return nil, err
 			}
 		}
