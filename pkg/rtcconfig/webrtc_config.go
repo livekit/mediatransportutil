@@ -264,9 +264,19 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 }
 
 func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, includeInternal bool) error {
+	return s.SetICEAddressRewriteRules(nat1To1AddressRewriteRules(ips, includeInternal)...)
+}
+
+func nat1To1AddressRewriteRules(ips []string, includeInternal bool) []webrtc.ICEAddressRewriteRule {
 	rules := make([]webrtc.ICEAddressRewriteRule, 0, len(ips)+1)
 	catchAll := make([]string, 0, len(ips))
 
+	// Leaving Mode unspecified makes pion/webrtc fall back to its own default
+	// for the candidate type, which is Replace for host candidates — the same
+	// as explicitly requesting includeInternal=false. So catchAll must carry
+	// the resolved mode explicitly too, or includeInternal=true silently has
+	// no effect for plain IPs (the common case: NodeIP.ToStringSlice() and
+	// bare external IPs never contain "/" and always land here).
 	mode := webrtc.ICEAddressRewriteModeUnspecified
 	if includeInternal {
 		mode = webrtc.ICEAddressRewriteAppend
@@ -287,10 +297,11 @@ func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, includ
 		rules = append(rules, webrtc.ICEAddressRewriteRule{
 			External:        catchAll,
 			AsCandidateType: webrtc.ICECandidateTypeHost,
+			Mode:            mode,
 		})
 	}
 
-	return s.SetICEAddressRewriteRules(rules...)
+	return rules
 }
 
 func iceServerForStunServers(servers []string) webrtc.ICEServer {
