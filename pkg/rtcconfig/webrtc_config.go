@@ -96,22 +96,29 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			}
 			ipFilter = newFilter
 			s.SetIPFilter(ipFilter)
+			rewriteIPs := withAdditionalHostIPs(ips, rtcConf.AdditionalHostIPs)
 			if len(ips) == 0 {
 				logger.Infow("no external IPs found, using node IP for NAT1To1Ips", "ip", rtcConf.NodeIP)
-				if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), false); err != nil {
+				rewriteIPs = withAdditionalHostIPs(rtcConf.NodeIP.ToStringSlice(), rtcConf.AdditionalHostIPs)
+				if err := SetNAT1To1AddressRewriteRules(&s, rewriteIPs, false); err != nil {
 					return nil, err
 				}
 			} else {
 				logger.Infow("using external IPs", "ips", ips, "advertiseInternalIP", rtcConf.AdvertiseInternalIP)
-				if err := SetNAT1To1AddressRewriteRules(&s, ips, rtcConf.AdvertiseInternalIP); err != nil {
+				if err := SetNAT1To1AddressRewriteRules(&s, rewriteIPs, rtcConf.AdvertiseInternalIP); err != nil {
 					return nil, err
 				}
 			}
-			nat1to1IPs = ips
+			nat1to1IPs = rewriteIPs
 		} else {
-			if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), false); err != nil {
+			rewriteIPs := withAdditionalHostIPs(rtcConf.NodeIP.ToStringSlice(), rtcConf.AdditionalHostIPs)
+			if err := SetNAT1To1AddressRewriteRules(&s, rewriteIPs, false); err != nil {
 				return nil, err
 			}
+		}
+	} else if len(rtcConf.AdditionalHostIPs) > 0 {
+		if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.AdditionalHostIPs, true); err != nil {
+			return nil, err
 		}
 	}
 
@@ -250,33 +257,103 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 }
 
 func SetNAT1To1AddressRewriteRules(s *webrtc.SettingEngine, ips []string, includeInternal bool) error {
+	return s.SetICEAddressRewriteRules(nat1To1AddressRewriteRules(ips, includeInternal)...)
+}
+
+func nat1To1AddressRewriteRules(ips []string, includeInternal bool) []webrtc.ICEAddressRewriteRule {
 	rules := make([]webrtc.ICEAddressRewriteRule, 0, len(ips)+1)
 	catchAll := make([]string, 0, len(ips))
+	type localMapping struct {
+		local    string
+		external []string
+	}
+	mappings := make([]localMapping, 0, len(ips))
+	mappingByLocal := make(map[string]int, len(ips))
 
 	mode := webrtc.ICEAddressRewriteModeUnspecified
 	if includeInternal {
 		mode = webrtc.ICEAddressRewriteAppend
 	}
-	for _, ip := range ips {
-		if parts := strings.Split(ip, "/"); len(parts) == 2 {
-			rules = append(rules, webrtc.ICEAddressRewriteRule{
-				External:        []string{parts[0]},
-				Local:           parts[1],
-				AsCandidateType: webrtc.ICECandidateTypeHost,
-				Mode:            mode,
-			})
-		} else {
-			catchAll = append(catchAll, ip)
+	for _, mapping := range ips {
+		external, local, mapped := strings.Cut(mapping, "/")
+		if !mapped {
+			catchAll = appendUnique(catchAll, strings.TrimSpace(mapping))
+			continue
 		}
+
+		external = strings.TrimSpace(external)
+		local = strings.TrimSpace(local)
+		if index, ok := mappingByLocal[local]; ok {
+			mappings[index].external = appendUnique(mappings[index].external, external)
+			continue
+		}
+
+		mappingByLocal[local] = len(mappings)
+		mappings = append(mappings, localMapping{
+			local:    local,
+			external: []string{external},
+		})
+	}
+	for _, mapping := range mappings {
+		rules = append(rules, webrtc.ICEAddressRewriteRule{
+			External:        mapping.external,
+			Local:           mapping.local,
+			AsCandidateType: webrtc.ICECandidateTypeHost,
+			Mode:            mode,
+		})
 	}
 	if len(catchAll) > 0 {
 		rules = append(rules, webrtc.ICEAddressRewriteRule{
 			External:        catchAll,
 			AsCandidateType: webrtc.ICECandidateTypeHost,
+			Mode:            mode,
 		})
 	}
 
-	return s.SetICEAddressRewriteRules(rules...)
+	return rules
+}
+
+func withAdditionalHostIPs(ips, additionalHostIPs []string) []string {
+	if len(additionalHostIPs) == 0 {
+		return ips
+	}
+
+	combined := slices.Clone(ips)
+	locals := make([]string, 0, len(ips))
+	for _, mapping := range ips {
+		_, local, mapped := strings.Cut(mapping, "/")
+		if !mapped {
+			continue
+		}
+
+		local = strings.TrimSpace(local)
+		if net.ParseIP(local) != nil && !slices.Contains(locals, local) {
+			locals = append(locals, local)
+		}
+	}
+
+	for _, local := range locals {
+		localIP := net.ParseIP(local)
+		for _, external := range additionalHostIPs {
+			externalIP := net.ParseIP(external)
+			if externalIP == nil || (localIP.To4() == nil) != (externalIP.To4() == nil) {
+				continue
+			}
+			combined = appendUnique(combined, external+"/"+local)
+		}
+	}
+
+	for _, external := range additionalHostIPs {
+		combined = appendUnique(combined, external)
+	}
+	return combined
+}
+
+func appendUnique(values []string, value string) []string {
+	if !slices.Contains(values, value) {
+		return append(values, value)
+	}
+	return values
 }
 
 func iceServerForStunServers(servers []string) webrtc.ICEServer {
