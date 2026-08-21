@@ -109,19 +109,6 @@ func NewWebRTCConfig(rtcConf *RTCConfig, development bool) (*WebRTCConfig, error
 			}
 			nat1to1IPs = ips
 		} else {
-			// AdvertiseInternalIP previously wasn't threaded through here, so
-			// setting rtc.node_ip manually (use_external_ip: false) always
-			// REPLACED host candidates with node_ip instead of keeping the
-			// original alongside it (pion/webrtc: NAT1-to-1 rewrite with
-			// Mode unspecified defaults to Replace for host candidates;
-			// ICEAddressRewriteAppend keeps both). That's fine when node_ip
-			// is reachable from everywhere, but breaks same-network peers
-			// when node_ip is only reachable from outside (e.g. a node
-			// behind a NAT/load balancer that isn't itself reachable via
-			// that address) — those peers lose their only working
-			// candidate. AdvertiseInternalIP already exists in config
-			// specifically to avoid this; it just wasn't respected in this
-			// branch.
 			logger.Infow("using explicit node IP for NAT1To1Ips", "ip", rtcConf.NodeIP, "advertiseInternalIP", rtcConf.AdvertiseInternalIP)
 			if err := SetNAT1To1AddressRewriteRules(&s, rtcConf.NodeIP.ToStringSlice(), rtcConf.AdvertiseInternalIP); err != nil {
 				return nil, err
@@ -271,12 +258,6 @@ func nat1To1AddressRewriteRules(ips []string, includeInternal bool) []webrtc.ICE
 	rules := make([]webrtc.ICEAddressRewriteRule, 0, len(ips)+1)
 	catchAll := make([]string, 0, len(ips))
 
-	// Leaving Mode unspecified makes pion/webrtc fall back to its own default
-	// for the candidate type, which is Replace for host candidates — the same
-	// as explicitly requesting includeInternal=false. So catchAll must carry
-	// the resolved mode explicitly too, or includeInternal=true silently has
-	// no effect for plain IPs (the common case: NodeIP.ToStringSlice() and
-	// bare external IPs never contain "/" and always land here).
 	mode := webrtc.ICEAddressRewriteModeUnspecified
 	if includeInternal {
 		mode = webrtc.ICEAddressRewriteAppend

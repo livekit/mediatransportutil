@@ -89,10 +89,6 @@ func Test_InterfaceFilterFromConf(t *testing.T) {
 }
 
 func Test_NAT1To1AddressRewriteRules(t *testing.T) {
-	// Plain IPs (no "external/local" pair) fall into the catchAll rule.
-	// Its Mode must track includeInternal just like the per-IP rules do,
-	// otherwise it silently keeps pion/webrtc's default for host candidates
-	// (Replace) regardless of includeInternal.
 	t.Run("catchAll replaces host candidate when includeInternal is false", func(t *testing.T) {
 		rules := nat1To1AddressRewriteRules([]string{"1.2.3.4"}, false)
 		require.Len(t, rules, 1)
