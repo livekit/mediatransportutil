@@ -18,6 +18,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,4 +86,34 @@ func Test_InterfaceFilterFromConf(t *testing.T) {
 			t.Errorf("For interface %s, expected %v but got %v", tc.iface, tc.expected, result)
 		}
 	}
+}
+
+func Test_NAT1To1AddressRewriteRules(t *testing.T) {
+	t.Run("catchAll replaces host candidate when includeInternal is false", func(t *testing.T) {
+		rules := nat1To1AddressRewriteRules([]string{"1.2.3.4"}, false)
+		require.Len(t, rules, 1)
+		require.Equal(t, []string{"1.2.3.4"}, rules[0].External)
+		require.Equal(t, webrtc.ICECandidateTypeHost, rules[0].AsCandidateType)
+		require.Equal(t, webrtc.ICEAddressRewriteModeUnspecified, rules[0].Mode)
+	})
+
+	t.Run("catchAll appends host candidate when includeInternal is true", func(t *testing.T) {
+		rules := nat1To1AddressRewriteRules([]string{"1.2.3.4"}, true)
+		require.Len(t, rules, 1)
+		require.Equal(t, []string{"1.2.3.4"}, rules[0].External)
+		require.Equal(t, webrtc.ICECandidateTypeHost, rules[0].AsCandidateType)
+		require.Equal(t, webrtc.ICEAddressRewriteAppend, rules[0].Mode)
+	})
+
+	t.Run("external/local pairs and catchAll IPs get the same mode", func(t *testing.T) {
+		rules := nat1To1AddressRewriteRules([]string{"5.6.7.8/10.0.0.1", "1.2.3.4"}, true)
+		require.Len(t, rules, 2)
+
+		require.Equal(t, []string{"5.6.7.8"}, rules[0].External)
+		require.Equal(t, "10.0.0.1", rules[0].Local)
+		require.Equal(t, webrtc.ICEAddressRewriteAppend, rules[0].Mode)
+
+		require.Equal(t, []string{"1.2.3.4"}, rules[1].External)
+		require.Equal(t, webrtc.ICEAddressRewriteAppend, rules[1].Mode)
+	})
 }
