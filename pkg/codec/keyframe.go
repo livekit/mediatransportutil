@@ -138,7 +138,12 @@ func IsH265KeyFrame(payload []byte) (kf bool) {
 		if len(payload) < 3 {
 			return false
 		}
-		naluType = (payload[2] & 0x7E) >> 1
+		// FU header: S (1 bit), E (1 bit), FuType (6 bits). Only the first
+		// fragment of a NAL unit carries the start bit.
+		if payload[2]&0x80 == 0 {
+			return false
+		}
+		naluType = payload[2] & 0x3F
 		return naluType == 33 || naluType == 34
 	default:
 		return false
