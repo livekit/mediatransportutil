@@ -22,6 +22,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pion/stun/v3"
@@ -144,14 +145,14 @@ func GetLocalIPAddresses(includeLoopback bool, includeV6 bool, ifFilter func(str
 
 type stunRequest struct {
 	server string
-	addr   *net.UDPAddr
-	raw    []byte
+	done   chan struct{}
 }
 
 // findExternalIP sends a binding request to every STUN server from one socket bound
-// to localAddr, so the configured port is the one that is tested and a slow or down
-// server does not hold up the others. It returns the first mapped address. Without a
-// local address both families are queried and an IPv4 answer is preferred.
+// to localAddr, so the configured port is the one that is tested. Each server is
+// resolved and queried on its own, so a slow lookup or a down server does not hold
+// up the others. It returns the first mapped address. Without a local address both
+// families are queried and an IPv4 answer is preferred.
 func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, network string) (string, error) {
 	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout)
 	defer cancel1()
@@ -179,110 +180,153 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 		return "", err
 	}
 	defer conn.Close()
-	// unblocks a pending read on timeout or cancellation
+	// unblocks the read on timeout or cancellation
 	stop := context.AfterFunc(ctx1, func() { conn.Close() })
 	defer stop()
 
+	var mu sync.Mutex
 	var errs []error
-	requests := make(map[[stun.TransactionIDSize]byte]stunRequest)
-	for _, ss := range stunServers {
-		host, portStr, err := net.SplitHostPort(ss)
+	pending := make(map[[stun.TransactionIDSize]byte]stunRequest)
+	addErr := func(err error) {
+		mu.Lock()
+		errs = append(errs, err)
+		mu.Unlock()
+	}
+
+	var wg sync.WaitGroup
+	// query sends a request and sends it again with a doubling interval, like RFC 5389,
+	// until it is answered or the context ends
+	query := func(server string, addr *net.UDPAddr) {
+		defer wg.Done()
+		msg, err := stun.Build(stun.TransactionID, stun.BindingRequest)
 		if err != nil {
-			errs = append(errs, err)
-			continue
+			addErr(err)
+			return
 		}
-		port, err := net.LookupPort("udp", portStr)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		ips, err := net.DefaultResolver.LookupNetIP(ctx1, ipNetwork, host)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		// one request per address family the server has
-		for _, is4 := range []bool{true, false} {
-			i := slices.IndexFunc(ips, func(ip netip.Addr) bool { return ip.Unmap().Is4() == is4 })
-			if i < 0 {
-				continue
+		done := make(chan struct{})
+		mu.Lock()
+		pending[msg.TransactionID] = stunRequest{server: server, done: done}
+		mu.Unlock()
+
+		for rto := 500 * time.Millisecond; ; rto *= 2 {
+			if _, err := conn.WriteToUDP(msg.Raw, addr); err != nil {
+				mu.Lock()
+				delete(pending, msg.TransactionID)
+				errs = append(errs, fmt.Errorf("%s: %w", server, err))
+				mu.Unlock()
+				return
 			}
-			msg, err := stun.Build(stun.TransactionID, stun.BindingRequest)
-			if err != nil {
-				return "", err
-			}
-			requests[msg.TransactionID] = stunRequest{
-				server: ss,
-				addr:   net.UDPAddrFromAddrPort(netip.AddrPortFrom(ips[i].Unmap(), uint16(port))),
-				raw:    msg.Raw,
+			select {
+			case <-done:
+				return
+			case <-ctx1.Done():
+				return
+			case <-time.After(rto):
 			}
 		}
 	}
+	for _, ss := range stunServers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			addrs, err := resolveSTUNServer(ctx1, ss, ipNetwork)
+			if err != nil {
+				addErr(err)
+				return
+			}
+			for _, addr := range addrs {
+				wg.Add(1)
+				go query(ss, addr)
+			}
+		}()
+	}
+	// wakes the read below once every lookup and request has ended
+	go func() {
+		wg.Wait()
+		_ = conn.SetReadDeadline(time.Now())
+	}()
 
 	preferIPv4 := ipNetwork == "ip"
 	var fallbackIP string
 	buf := make([]byte, 1500)
-	// retransmit unanswered requests with a doubling interval, like RFC 5389
-	for rto := 500 * time.Millisecond; len(requests) > 0; rto *= 2 {
-		for id, r := range requests {
-			if _, err := conn.WriteToUDP(r.raw, r.addr); err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", r.server, err))
-				delete(requests, id)
+	for {
+		n, _, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			if fallbackIP != "" {
+				return fallbackIP, nil
 			}
-		}
-		_ = conn.SetReadDeadline(time.Now().Add(rto))
-		for len(requests) > 0 {
-			n, _, err := conn.ReadFromUDP(buf)
-			if ctx1.Err() != nil {
-				if fallbackIP != "" {
-					return fallbackIP, nil
-				}
-				return "", errors.Join(append(errs, ctx1.Err())...)
-			}
+			mu.Lock()
+			defer mu.Unlock()
 			var netErr net.Error
-			if errors.As(err, &netErr) && netErr.Timeout() {
-				break
+			switch {
+			case ctx1.Err() != nil:
+				errs = append(errs, ctx1.Err())
+			case !errors.As(err, &netErr) || !netErr.Timeout():
+				errs = append(errs, err)
+			case len(errs) == 0:
+				errs = append(errs, errors.New("no STUN server answered"))
 			}
-			if err != nil {
-				return "", err
-			}
+			return "", errors.Join(errs...)
+		}
 
-			msg := &stun.Message{Raw: buf[:n]}
-			if err := msg.Decode(); err != nil {
-				continue
-			}
-			r, ok := requests[msg.TransactionID]
-			if !ok {
-				continue
-			}
-			delete(requests, msg.TransactionID)
+		msg := &stun.Message{Raw: buf[:n]}
+		if err := msg.Decode(); err != nil {
+			continue
+		}
+		mu.Lock()
+		r, ok := pending[msg.TransactionID]
+		if ok {
+			delete(pending, msg.TransactionID)
+			close(r.done)
+		}
+		mu.Unlock()
+		if !ok {
+			continue
+		}
 
-			var xorAddr stun.XORMappedAddress
-			if err := xorAddr.GetFrom(msg); err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", r.server, err))
-				continue
+		var xorAddr stun.XORMappedAddress
+		if err := xorAddr.GetFrom(msg); err != nil {
+			addErr(fmt.Errorf("%s: %w", r.server, err))
+			continue
+		}
+		ipAddr := xorAddr.IP.String()
+		logger.Infow(
+			"found external IP via STUN",
+			"localAddr", localAddr,
+			"stunServer", r.server,
+			"externalIP", ipAddr,
+		)
+		if preferIPv4 && xorAddr.IP.To4() == nil {
+			if fallbackIP == "" {
+				fallbackIP = ipAddr
 			}
-			ipAddr := xorAddr.IP.String()
-			logger.Infow(
-				"found external IP via STUN",
-				"localAddr", localAddr,
-				"stunServer", r.server,
-				"externalIP", ipAddr,
-			)
-			if preferIPv4 && xorAddr.IP.To4() == nil {
-				if fallbackIP == "" {
-					fallbackIP = ipAddr
-				}
-				continue
-			}
-			return ipAddr, nil
+			continue
+		}
+		return ipAddr, nil
+	}
+}
+
+// resolveSTUNServer returns the first address of each family that the server has.
+func resolveSTUNServer(ctx context.Context, server, ipNetwork string) ([]*net.UDPAddr, error) {
+	host, portStr, err := net.SplitHostPort(server)
+	if err != nil {
+		return nil, err
+	}
+	port, err := net.LookupPort("udp", portStr)
+	if err != nil {
+		return nil, err
+	}
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, ipNetwork, host)
+	if err != nil {
+		return nil, err
+	}
+	var addrs []*net.UDPAddr
+	for _, is4 := range []bool{true, false} {
+		if i := slices.IndexFunc(ips, func(ip netip.Addr) bool { return ip.Unmap().Is4() == is4 }); i >= 0 {
+			addrs = append(addrs, net.UDPAddrFromAddrPort(netip.AddrPortFrom(ips[i].Unmap(), uint16(port))))
 		}
 	}
-
-	if fallbackIP != "" {
-		return fallbackIP, nil
-	}
-	return "", errors.Join(errs...)
+	return addrs, nil
 }
 
 // GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
