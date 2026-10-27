@@ -16,8 +16,12 @@ package rtcconfig
 
 import (
 	"net"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/pion/stun/v3"
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/require"
 )
@@ -116,4 +120,64 @@ func Test_NAT1To1AddressRewriteRules(t *testing.T) {
 		require.Equal(t, []string{"1.2.3.4"}, rules[1].External)
 		require.Equal(t, webrtc.ICEAddressRewriteAppend, rules[1].Mode)
 	})
+}
+
+func Test_GetNAT1to1IPsForConf_SlowIPv4(t *testing.T) {
+	isLoopback := func(name string) bool { return strings.HasPrefix(name, "lo") }
+	localIPs, err := GetLocalIPAddresses(true, true, isLoopback, nil)
+	require.NoError(t, err)
+	if !slices.Contains(localIPs, "127.0.0.1") || !slices.Contains(localIPs, "::1") {
+		t.Skip("needs IPv4 and IPv6 loopback")
+	}
+
+	// IPv6 answers at once, IPv4 answers after the 1s grace period that a first
+	// result used to start.
+	conf := &RTCConfig{
+		STUNServers: []string{
+			startSTUNServer(t, "udp4", "127.0.0.1:0", net.ParseIP("203.0.113.1"), 2*time.Second, nil),
+			startSTUNServer(t, "udp6", "[::1]:0", net.ParseIP("2001:db8::1"), 0, nil),
+		},
+		EnableLoopbackCandidate:  true,
+		SkipExternalIPValidation: true,
+		ExternalIPOnly:           true,
+	}
+	ips, ipFilter, err := getNAT1to1IPsForConf(conf, isLoopback, nil)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"203.0.113.1/127.0.0.1", "2001:db8::1/::1"}, ips)
+	require.True(t, ipFilter(net.ParseIP("127.0.0.1")))
+}
+
+// startSTUNServer answers binding requests with external as the mapped address, after
+// delay. When sources is not nil, it gets the source address of each request.
+func startSTUNServer(t *testing.T, network, addr string, external net.IP, delay time.Duration, sources chan<- net.Addr) string {
+	conn, err := net.ListenPacket(network, addr)
+	require.NoError(t, err)
+	t.Cleanup(func() { conn.Close() })
+
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			n, from, err := conn.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			req := &stun.Message{Raw: slices.Clone(buf[:n])}
+			if err := req.Decode(); err != nil {
+				continue
+			}
+			if sources != nil {
+				sources <- from
+			}
+			res, err := stun.Build(
+				stun.NewTransactionIDSetter(req.TransactionID),
+				stun.BindingSuccess,
+				&stun.XORMappedAddress{IP: external, Port: from.(*net.UDPAddr).Port},
+			)
+			if err != nil {
+				continue
+			}
+			time.AfterFunc(delay, func() { _, _ = conn.WriteTo(res.Raw, from) })
+		}
+	}()
+	return conn.LocalAddr().String()
 }

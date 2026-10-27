@@ -344,6 +344,10 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 		}(ip)
 	}
 
+	// A fast IPv6 result must not start the grace period and cancel a slower IPv4
+	// lookup: ExternalIPOnly drops any IPv4 that is not mapped.
+	hasLocalIPv4 := slices.ContainsFunc(localIPs, func(ip string) bool { return net.ParseIP(ip).To4() != nil })
+
 	var firstResolved bool
 	var mappedIPs []string
 	natMapping := make(map[string]string)
@@ -354,7 +358,7 @@ done:
 	for {
 		select {
 		case mapping := <-addrCh:
-			if !firstResolved {
+			if !firstResolved && (!hasLocalIPv4 || net.ParseIP(mapping.localIP).To4() != nil) {
 				firstResolved = true
 				timeout.Reset(1 * time.Second)
 			}
