@@ -122,7 +122,7 @@ func Test_NAT1To1AddressRewriteRules(t *testing.T) {
 	})
 }
 
-func Test_GetNAT1to1IPsForConf_SlowIPv4(t *testing.T) {
+func Test_GetNAT1to1IPsForConf_Families(t *testing.T) {
 	isLoopback := func(name string) bool { return strings.HasPrefix(name, "lo") }
 	localIPs, err := GetLocalIPAddresses(true, true, isLoopback, nil)
 	require.NoError(t, err)
@@ -130,21 +130,43 @@ func Test_GetNAT1to1IPsForConf_SlowIPv4(t *testing.T) {
 		t.Skip("needs IPv4 and IPv6 loopback")
 	}
 
-	// IPv6 answers at once, IPv4 answers after the 1s grace period that a first
-	// result used to start.
-	conf := &RTCConfig{
-		STUNServers: []string{
+	getIPs := func(t *testing.T, servers ...string) []string {
+		conf := &RTCConfig{
+			STUNServers:              servers,
+			EnableLoopbackCandidate:  true,
+			SkipExternalIPValidation: true,
+			ExternalIPOnly:           true,
+		}
+		ips, ipFilter, err := getNAT1to1IPsForConf(conf, isLoopback, nil)
+		require.NoError(t, err)
+		require.True(t, ipFilter(net.ParseIP("127.0.0.1")))
+		return ips
+	}
+
+	// the slow family answers 2s after the fast one, past the 1s grace period
+	t.Run("slow IPv4", func(t *testing.T) {
+		ips := getIPs(t,
 			startSTUNServer(t, "udp4", "127.0.0.1:0", net.ParseIP("203.0.113.1"), 2*time.Second, nil),
 			startSTUNServer(t, "udp6", "[::1]:0", net.ParseIP("2001:db8::1"), 0, nil),
-		},
-		EnableLoopbackCandidate:  true,
-		SkipExternalIPValidation: true,
-		ExternalIPOnly:           true,
-	}
-	ips, ipFilter, err := getNAT1to1IPsForConf(conf, isLoopback, nil)
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"203.0.113.1/127.0.0.1", "2001:db8::1/::1"}, ips)
-	require.True(t, ipFilter(net.ParseIP("127.0.0.1")))
+		)
+		require.ElementsMatch(t, []string{"203.0.113.1/127.0.0.1", "2001:db8::1/::1"}, ips)
+	})
+
+	t.Run("slow IPv6", func(t *testing.T) {
+		ips := getIPs(t,
+			startSTUNServer(t, "udp4", "127.0.0.1:0", net.ParseIP("203.0.113.1"), 0, nil),
+			startSTUNServer(t, "udp6", "[::1]:0", net.ParseIP("2001:db8::1"), 2*time.Second, nil),
+		)
+		require.ElementsMatch(t, []string{"203.0.113.1/127.0.0.1", "2001:db8::1/::1"}, ips)
+	})
+
+	// IPv6 has no server, so its lookup fails at once and must not hold up the result
+	t.Run("failed IPv6", func(t *testing.T) {
+		start := time.Now()
+		ips := getIPs(t, startSTUNServer(t, "udp4", "127.0.0.1:0", net.ParseIP("203.0.113.1"), 0, nil))
+		require.ElementsMatch(t, []string{"203.0.113.1/127.0.0.1", "::1/::1"}, ips)
+		require.Less(t, time.Since(start), time.Second)
+	})
 }
 
 // startSTUNServer answers binding requests with external as the mapped address, after
