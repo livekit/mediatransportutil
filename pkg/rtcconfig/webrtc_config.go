@@ -327,6 +327,9 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 		wg.Add(1)
 		go func(localIP string) {
 			defer wg.Done()
+			// every lookup reports once, with an empty externalIP on failure
+			mapping := ipmapping{localIP: localIP}
+			defer func() { addrCh <- mapping }()
 			for _, port := range udpPorts {
 				addr, err := getExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port}, !rtcConf.SkipExternalIPValidation, "udp")
 				if err != nil {
@@ -337,11 +340,29 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 					logger.Infow("failed to get external ip", "local", localIP, "err", err)
 					return
 				}
-				addrCh <- ipmapping{externalIP: addr, localIP: localIP}
+				mapping.externalIP = addr
 				return
 			}
 			logger.Infow("failed to get external ip after all ports tried", "local", localIP, "ports", udpPorts)
 		}(ip)
+	}
+
+	// The grace period starts once every local address family has a mapping or no
+	// lookup left, so a fast result in one family does not cancel a slower lookup
+	// in the other. ExternalIPOnly drops any IPv4 that is not mapped.
+	isIPv4 := func(ip string) bool { return net.ParseIP(ip).To4() != nil }
+	pending := make(map[bool]int)
+	mapped := make(map[bool]bool)
+	for _, ip := range localIPs {
+		pending[isIPv4(ip)]++
+	}
+	settled := func() bool {
+		for family, n := range pending {
+			if n > 0 && !mapped[family] {
+				return false
+			}
+		}
+		return true
 	}
 
 	var firstResolved bool
@@ -351,22 +372,27 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 	defer timeout.Stop()
 
 done:
-	for {
+	for remaining := len(localIPs); remaining > 0; remaining-- {
 		select {
 		case mapping := <-addrCh:
-			if !firstResolved {
+			family := isIPv4(mapping.localIP)
+			pending[family]--
+			if mapping.externalIP != "" {
+				mapped[family] = true
+				if local, ok := natMapping[mapping.externalIP]; ok {
+					logger.Infow(
+						"external ip already resolved, ignore duplicate",
+						"external", mapping.externalIP,
+						"local", local,
+						"ignore", mapping.localIP)
+				} else {
+					natMapping[mapping.externalIP] = mapping.localIP
+					mappedIPs = append(mappedIPs, mapping.localIP)
+				}
+			}
+			if !firstResolved && settled() {
 				firstResolved = true
 				timeout.Reset(1 * time.Second)
-			}
-			if local, ok := natMapping[mapping.externalIP]; ok {
-				logger.Infow(
-					"external ip already resolved, ignore duplicate",
-					"external", mapping.externalIP,
-					"local", local,
-					"ignore", mapping.localIP)
-			} else {
-				natMapping[mapping.externalIP] = mapping.localIP
-				mappedIPs = append(mappedIPs, mapping.localIP)
 			}
 
 		case <-timeout.C:
