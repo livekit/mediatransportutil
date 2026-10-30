@@ -307,9 +307,9 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 			return "", errors.Join(errs...)
 		}
 
-		if ip, ok := bytes.CutPrefix(buf[:n], []byte(probeMagic)); ok {
-			if probed[string(ip)] {
-				return string(ip), nil
+		if ip, ok := parseProbe(buf[:n]); ok {
+			if probed[ip] {
+				return ip, nil
 			}
 			continue
 		}
@@ -325,7 +325,9 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 		mu.Lock()
 		r, ok := pending[msg.TransactionID]
 		delete(pending, msg.TransactionID)
-		// the entry's query still holds a count, so this Add cannot follow a finished Wait
+		// A query deletes its entry under mu before it calls wg.Done. So while the entry is
+		// found here, that query has not called wg.Done, the count is above zero and Wait
+		// has not returned. The probe is counted before mu is released.
 		startProbe := ok && err == nil && validate && !probed[ipAddr]
 		if startProbe {
 			probed[ipAddr] = true
@@ -419,4 +421,11 @@ func sendProbe(nodeIP string, port int) error {
 
 	_, err = cli.Write([]byte(probeMagic + nodeIP))
 	return err
+}
+
+// parseProbe returns the external IP named in a validation packet. The packet carries
+// the IP because the source address it arrives from does not tell which probe it is.
+func parseProbe(b []byte) (string, bool) {
+	ip, ok := bytes.CutPrefix(b, []byte(probeMagic))
+	return string(ip), ok
 }
