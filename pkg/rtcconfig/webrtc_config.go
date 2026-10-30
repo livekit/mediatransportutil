@@ -368,7 +368,12 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 	var firstResolved bool
 	var mappedIPs []string
 	natMapping := make(map[string]string)
-	timeout := time.NewTimer(5 * time.Second)
+	// as long as one lookup can take, so that a slow answer still gets validated
+	lookupTimeout := stunPingTimeout
+	if !rtcConf.SkipExternalIPValidation {
+		lookupTimeout += validationTimeout
+	}
+	timeout := time.NewTimer(lookupTimeout)
 	defer timeout.Stop()
 
 done:
