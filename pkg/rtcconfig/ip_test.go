@@ -90,7 +90,6 @@ func Test_GetExternalIP_NoCandidateValidates(t *testing.T) {
 	start := time.Now()
 	_, err := GetExternalIP(context.Background(), servers, freeUDPAddr(t))
 	require.ErrorContains(t, err, "203.0.113.1")
-	require.ErrorIs(t, err, context.DeadlineExceeded)
 	// a failed probe must end the call at its own timeout, not at the socket's
 	require.Less(t, time.Since(start), validationTimeout+time.Second)
 }

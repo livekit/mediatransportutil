@@ -36,6 +36,15 @@ const (
 	validationTimeout = 5 * time.Second
 )
 
+// lookupTimeout is how long one external IP lookup can take. A late STUN answer
+// still gets a full validation window.
+func lookupTimeout(validate bool) time.Duration {
+	if validate {
+		return stunPingTimeout + validationTimeout
+	}
+	return stunPingTimeout
+}
+
 func (conf *RTCConfig) determineIP() (string, error) {
 	if conf.UseExternalIP {
 		stunServers := conf.STUNServers
@@ -170,12 +179,7 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 	}
 	validate = validate && laddr != nil
 
-	// the socket outlives the STUN requests so that a late answer gets a full validation window
-	timeout := stunPingTimeout
-	if validate {
-		timeout += validationTimeout
-	}
-	ctx1, cancel1 := context.WithTimeout(ctx, timeout)
+	ctx1, cancel1 := context.WithTimeout(ctx, lookupTimeout(validate))
 	defer cancel1()
 	stunCtx, stunCancel := context.WithTimeout(ctx1, stunPingTimeout)
 	defer stunCancel()
