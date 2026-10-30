@@ -15,6 +15,7 @@
 package rtcconfig
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -153,10 +154,12 @@ type stunRequest struct {
 // resolved and queried on its own, so a slow lookup or a down server does not hold
 // up the others. It returns the first mapped address. Without a local address both
 // families are queried and an IPv4 answer is preferred.
-func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, network string) (string, error) {
-	ctx1, cancel1 := context.WithTimeout(ctx, stunPingTimeout)
-	defer cancel1()
-
+//
+// With validate and a local address, each distinct mapped address is probed by
+// sending a packet to it that must come back to the socket, and the first address
+// whose probe returns wins. Servers can map the socket to different addresses, for
+// example on a multi-homed node, and only some of them may reach back.
+func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool, network string) (string, error) {
 	var laddr *net.UDPAddr
 	if localAddr != nil {
 		udpAddr, ok := localAddr.(*net.UDPAddr)
@@ -165,6 +168,17 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 		}
 		laddr = udpAddr
 	}
+	validate = validate && laddr != nil
+
+	// the socket outlives the STUN requests so that a late answer gets a full validation window
+	timeout := stunPingTimeout
+	if validate {
+		timeout += validationTimeout
+	}
+	ctx1, cancel1 := context.WithTimeout(ctx, timeout)
+	defer cancel1()
+	stunCtx, stunCancel := context.WithTimeout(ctx1, stunPingTimeout)
+	defer stunCancel()
 	// "udp", "udp4", "udp6" -> "ip", "ip4", "ip6", narrowed to the local address family
 	ipNetwork := "ip" + strings.TrimPrefix(network, "udp")
 	if ipNetwork == "ip" && laddr != nil && laddr.IP != nil {
@@ -180,6 +194,7 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 		return "", err
 	}
 	defer conn.Close()
+	port := conn.LocalAddr().(*net.UDPAddr).Port
 	// unblocks the read on timeout or cancellation
 	stop := context.AfterFunc(ctx1, func() { conn.Close() })
 	defer stop()
@@ -207,29 +222,51 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 		mu.Lock()
 		pending[msg.TransactionID] = stunRequest{server: server, done: done}
 		mu.Unlock()
+		// runs before wg.Done, so a pending entry means this query still holds a count
+		defer func() {
+			mu.Lock()
+			delete(pending, msg.TransactionID)
+			mu.Unlock()
+		}()
 
 		for rto := 500 * time.Millisecond; ; rto *= 2 {
 			if _, err := conn.WriteToUDP(msg.Raw, addr); err != nil {
-				mu.Lock()
-				delete(pending, msg.TransactionID)
-				errs = append(errs, fmt.Errorf("%s: %w", server, err))
-				mu.Unlock()
+				addErr(fmt.Errorf("%s: %w", server, err))
 				return
 			}
 			select {
 			case <-done:
 				return
-			case <-ctx1.Done():
+			case <-stunCtx.Done():
 				return
 			case <-time.After(rto):
 			}
 		}
 	}
+	// probe sends the validation packet to ip and waits for the read below to see it
+	// come back, which ends the call
+	probe := func(ip string) {
+		defer wg.Done()
+		pctx, pcancel := context.WithTimeout(ctx1, validationTimeout)
+		defer pcancel()
+
+		err := sendProbe(ip, port)
+		if err == nil {
+			<-pctx.Done()
+			if !errors.Is(pctx.Err(), context.DeadlineExceeded) {
+				// validated or cancelled
+				return
+			}
+			err = pctx.Err()
+		}
+		logger.Warnw("could not validate external IP", err, "ip", ip, "from", localAddr)
+		addErr(fmt.Errorf("%s: %w", ip, err))
+	}
 	for _, ss := range stunServers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			addrs, err := resolveSTUNServer(ctx1, ss, ipNetwork)
+			addrs, err := resolveSTUNServer(stunCtx, ss, ipNetwork)
 			if err != nil {
 				addErr(err)
 				return
@@ -248,6 +285,7 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 
 	preferIPv4 := ipNetwork == "ip"
 	var fallbackIP string
+	probed := make(map[string]bool)
 	buf := make([]byte, 1500)
 	for {
 		n, _, err := conn.ReadFromUDP(buf)
@@ -269,33 +307,51 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 			return "", errors.Join(errs...)
 		}
 
+		if ip, ok := bytes.CutPrefix(buf[:n], []byte(probeMagic)); ok {
+			if probed[string(ip)] {
+				return string(ip), nil
+			}
+			continue
+		}
+
 		msg := &stun.Message{Raw: buf[:n]}
 		if err := msg.Decode(); err != nil {
 			continue
 		}
+		var xorAddr stun.XORMappedAddress
+		err = xorAddr.GetFrom(msg)
+		ipAddr := xorAddr.IP.String()
+
 		mu.Lock()
 		r, ok := pending[msg.TransactionID]
-		if ok {
-			delete(pending, msg.TransactionID)
-			close(r.done)
+		delete(pending, msg.TransactionID)
+		// the entry's query still holds a count, so this Add cannot follow a finished Wait
+		startProbe := ok && err == nil && validate && !probed[ipAddr]
+		if startProbe {
+			probed[ipAddr] = true
+			wg.Add(1)
 		}
 		mu.Unlock()
 		if !ok {
 			continue
 		}
-
-		var xorAddr stun.XORMappedAddress
-		if err := xorAddr.GetFrom(msg); err != nil {
+		close(r.done)
+		if startProbe {
+			go probe(ipAddr)
+		}
+		if err != nil {
 			addErr(fmt.Errorf("%s: %w", r.server, err))
 			continue
 		}
-		ipAddr := xorAddr.IP.String()
 		logger.Infow(
 			"found external IP via STUN",
 			"localAddr", localAddr,
 			"stunServer", r.server,
 			"externalIP", ipAddr,
 		)
+		if validate {
+			continue
+		}
 		if preferIPv4 && xorAddr.IP.To4() == nil {
 			if fallbackIP == "" {
 				fallbackIP = ipAddr
@@ -346,66 +402,21 @@ func getExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr
 		return "", errors.New("STUN servers are required but not defined")
 	}
 
-	ipAddr, err := findExternalIP(ctx, stunServers, localAddr, network)
-	if err != nil || !validate {
-		return ipAddr, err
-	}
-	return ipAddr, validateExternalIP(ctx, ipAddr, localAddr)
+	return findExternalIP(ctx, stunServers, localAddr, validate, network)
 }
 
-// validateExternalIP validates that the external IP is accessible from the outside by listen the local address,
-// it will send a magic string to the external IP and check the string is received by the local address.
-func validateExternalIP(ctx context.Context, nodeIP string, addr net.Addr) error {
-	if addr == nil {
-		return nil
-	}
+// probeMagic starts the validation packet, which then names the external IP it was sent to.
+const probeMagic = "9#B8D2Nvg2xg5P$ZRwJ+f)*^Nne6*W3WamGY"
 
-	udpAddr, ok := addr.(*net.UDPAddr)
-	if !ok {
-		return errors.New("not UDP address")
-	}
-
-	srv, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		return err
-	}
-	defer srv.Close()
-
-	magicString := "9#B8D2Nvg2xg5P$ZRwJ+f)*^Nne6*W3WamGY"
-
-	validCh := make(chan struct{})
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			n, err := srv.Read(buf)
-			if err != nil {
-				logger.Debugw("error reading from UDP socket", "err", err)
-				return
-			}
-			if string(buf[:n]) == magicString {
-				close(validCh)
-				return
-			}
-		}
-	}()
-
-	cli, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP(nodeIP), Port: srv.LocalAddr().(*net.UDPAddr).Port})
+// sendProbe sends the validation packet to the external IP from a separate socket, so it
+// reaches the bound socket only if the external IP routes back to it.
+func sendProbe(nodeIP string, port int) error {
+	cli, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP(nodeIP), Port: port})
 	if err != nil {
 		return err
 	}
 	defer cli.Close()
 
-	if _, err = cli.Write([]byte(magicString)); err != nil {
-		return err
-	}
-
-	ctx1, cancel1 := context.WithTimeout(ctx, validationTimeout)
-	defer cancel1()
-	select {
-	case <-validCh:
-		return nil
-	case <-ctx1.Done():
-		logger.Warnw("could not validate external IP", ctx1.Err(), "ip", nodeIP, "from", addr)
-		return ctx1.Err()
-	}
+	_, err = cli.Write([]byte(probeMagic + nodeIP))
+	return err
 }

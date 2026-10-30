@@ -70,6 +70,20 @@ func Test_GetExternalIP_ConfiguredPort(t *testing.T) {
 	require.Equal(t, localAddr.Port, (<-sources).(*net.UDPAddr).Port)
 }
 
+func Test_GetExternalIP_ValidatesEachCandidate(t *testing.T) {
+	// the servers map the socket to different addresses, like a multi-homed node, and
+	// only the slower answer routes back to the socket
+	servers := []string{
+		startSTUNServer(t, "udp4", "127.0.0.1:0", net.ParseIP("203.0.113.1"), 0, nil),
+		startSTUNServer(t, "udp4", "127.0.0.1:0", net.ParseIP("127.0.0.1"), 300*time.Millisecond, nil),
+	}
+	start := time.Now()
+	ip, err := GetExternalIP(context.Background(), servers, freeUDPAddr(t))
+	require.NoError(t, err)
+	require.Equal(t, "127.0.0.1", ip)
+	require.Less(t, time.Since(start), validationTimeout)
+}
+
 func Test_GetExternalIP_PortInUse(t *testing.T) {
 	localAddr := freeUDPAddr(t)
 	holder, err := net.ListenUDP("udp4", localAddr)
