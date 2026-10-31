@@ -84,6 +84,16 @@ func TestParseH264SPS_EmptyAfterStripStartCode(t *testing.T) {
 	_ = ExtractH264VideoSize(payload)
 }
 
+func TestParseH264SPS_CropLargerThanFrame(t *testing.T) {
+	// 16x16 baseline SPS with frame_crop_right_offset 9, which crops 18 luma columns
+	sps := []byte{0x67, 0x42, 0x00, 0x1e, 0xdd, 0xf8, 0xae}
+	info, err := parseH264SPS(sps)
+	require.NoError(t, err)
+	require.Equal(t, uint(16), info.CodedWidth)
+	require.Equal(t, uint(0), info.DisplayWidth)
+	require.Equal(t, uint(16), info.DisplayHeight)
+}
+
 func TestParseH264SPS_UnboundedPocTypeLoop(t *testing.T) {
 	payload := []byte{0x27, 0x08, 0x30, 0x30, 0x30, 0x41, 0x30,
 		0x00, 0x00, 0x00, 0x7f, 0x27, 0x08, 0xff, 0x7f, 0xa8}

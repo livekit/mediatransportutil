@@ -471,6 +471,10 @@ func parseH264SPS(nal []byte) (*SPSInfo, error) {
 		cropUnitY *= 2
 	}
 
+	// a crop larger than the frame gives 0, not a wrapped size
+	displayWidth := max(int(width)-int(cropLeft+cropRight)*int(cropUnitX), 0)
+	displayHeight := max(int(height)-int(cropTop+cropBottom)*int(cropUnitY), 0)
+
 	info := &SPSInfo{
 		ChromaFormatIDC:        chromaFormatIDC,
 		PicWidthInLumaSamples:  width,
@@ -482,8 +486,8 @@ func parseH264SPS(nal []byte) (*SPSInfo, error) {
 		ConfWinBottomOffset:    cropBottom,
 		CodedWidth:             width,
 		CodedHeight:            height,
-		DisplayWidth:           width - (cropLeft+cropRight)*cropUnitX,
-		DisplayHeight:          height - (cropTop+cropBottom)*cropUnitY,
+		DisplayWidth:           uint(displayWidth),
+		DisplayHeight:          uint(displayHeight),
 	}
 
 	return info, nil
