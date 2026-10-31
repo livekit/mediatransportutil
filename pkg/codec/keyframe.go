@@ -160,13 +160,12 @@ func IsVP8KeyFrame(payload []byte) bool {
 func IsVP9KeyFrame(vp9 *codecs.VP9Packet, payload []byte) bool {
 	if vp9 == nil {
 		vp9 = &codecs.VP9Packet{}
-		_, err := vp9.Unmarshal(payload)
-		if err != nil || len(vp9.Payload) < 1 {
+		if _, err := vp9.Unmarshal(payload); err != nil {
 			return false
 		}
 	}
 
-	if !vp9.B {
+	if !vp9.B || len(vp9.Payload) < 1 {
 		return false
 	}
 
