@@ -40,8 +40,7 @@ validated before calling in.
 
 LiveKit server (`livekit/livekit`) is enrolled separately, and
 `livekit/protocol` has its own threat model. Report a bug in how the server calls these helpers there. Report a
-bug in the helpers themselves here. Report a bug in `pion/*` packages that
-these helpers wrap to that project, unless this code misuses them.
+bug in the helpers themselves here.
 
 ## Security properties
 
