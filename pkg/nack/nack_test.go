@@ -165,3 +165,33 @@ func Test_nackQueue_remove(t *testing.T) {
 		})
 	}
 }
+
+func Test_nackQueue_pushRange(t *testing.T) {
+	small := NackQueueParamsDefault
+	small.MaxNacks = 3
+
+	tests := []struct {
+		name   string
+		params NackQueueParams
+		end    uint16
+		count  uint64
+		want   []uint16
+	}{
+		{name: "empty range", params: NackQueueParamsDefault, end: 10, count: 0},
+		{name: "short range", params: NackQueueParamsDefault, end: 10, count: 3, want: []uint16{7, 8, 9}},
+		{name: "range wraps", params: NackQueueParamsDefault, end: 2, count: 4, want: []uint16{65534, 65535, 0, 1}},
+		{name: "gap larger than queue", params: small, end: 100, count: 1 << 40, want: []uint16{97, 98, 99}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, n := range []NackQueueInterface{NewNACKQueue(tt.params), NewNACKQueueSafe(tt.params)} {
+				n.PushRange(tt.end, tt.count)
+				var got []uint16
+				for _, nack := range n.Nacks() {
+					got = append(got, nack.seqNum)
+				}
+				require.Equal(t, tt.want, got)
+			}
+		})
+	}
+}

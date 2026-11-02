@@ -38,6 +38,7 @@ type NackQueueInterface interface {
 	SetRTT(rtt uint32)
 	Remove(sn uint16)
 	Push(sn uint16)
+	PushRange(end uint16, count uint64)
 	Pairs() ([]rtcp.NackPair, int)
 	Nacks() []*nack // for testing only
 }
@@ -119,6 +120,15 @@ func (n *nackQueue) Push(sn uint16) {
 	}
 
 	n.nacks = append(n.nacks, newNack(&n.nackParams, sn))
+}
+
+// PushRange pushes the count sequence numbers that come before end.
+// Only the newest entries that fit in the queue are pushed.
+func (n *nackQueue) PushRange(end uint16, count uint64) {
+	count = min(count, uint64(cap(n.nacks)))
+	for i := count; i > 0; i-- {
+		n.Push(end - uint16(i))
+	}
 }
 
 func (n *nackQueue) Pairs() ([]rtcp.NackPair, int) {
@@ -213,6 +223,12 @@ func (n *nackQueueSafe) Push(sn uint16) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 	n.NackQueueInterface.Push(sn)
+}
+
+func (n *nackQueueSafe) PushRange(end uint16, count uint64) {
+	n.lock.Lock()
+	defer n.lock.Unlock()
+	n.NackQueueInterface.PushRange(end, count)
 }
 
 func (n *nackQueueSafe) Pairs() ([]rtcp.NackPair, int) {
