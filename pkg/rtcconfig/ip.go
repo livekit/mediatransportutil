@@ -32,17 +32,65 @@ import (
 )
 
 const (
-	stunPingTimeout   = 5 * time.Second
-	validationTimeout = 5 * time.Second
+	stunPingTimeout         = 5 * time.Second
+	validationTimeout       = 5 * time.Second
+	externalIPRetries       = 3
+	externalIPRetryInterval = 500 * time.Millisecond
 )
+
+// externalIPOptions tunes how long one external IP lookup waits. A zero field
+// keeps its package default (stunPingTimeout, validationTimeout).
+type externalIPOptions struct {
+	stunPingTimeout   time.Duration
+	validationTimeout time.Duration
+}
+
+// ExternalIPOption overrides a default used by GetExternalIP and GetExternalIPv4.
+type ExternalIPOption func(*externalIPOptions)
+
+// WithStunPingTimeout sets how long one STUN binding request waits for a reply.
+// A value of zero or less keeps the default.
+func WithStunPingTimeout(d time.Duration) ExternalIPOption {
+	return func(o *externalIPOptions) {
+		if d > 0 {
+			o.stunPingTimeout = d
+		}
+	}
+}
+
+// WithValidationTimeout sets how long external-IP validation waits for the probe
+// packet to return. It has no effect when validation is skipped. A value of zero
+// or less keeps the default.
+func WithValidationTimeout(d time.Duration) ExternalIPOption {
+	return func(o *externalIPOptions) {
+		if d > 0 {
+			o.validationTimeout = d
+		}
+	}
+}
+
+func resolveExternalIPOptions(opts []ExternalIPOption) externalIPOptions {
+	o := externalIPOptions{
+		stunPingTimeout:   stunPingTimeout,
+		validationTimeout: validationTimeout,
+	}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
+}
 
 // lookupTimeout is how long one external IP lookup can take. A late STUN answer
 // still gets a full validation window.
-func lookupTimeout(validate bool) time.Duration {
+func (o externalIPOptions) lookupTimeout(validate bool) time.Duration {
 	if validate {
-		return stunPingTimeout + validationTimeout
+		return o.stunPingTimeout + o.validationTimeout
 	}
-	return stunPingTimeout
+	return o.stunPingTimeout
+}
+
+func lookupTimeout(validate bool) time.Duration {
+	return resolveExternalIPOptions(nil).lookupTimeout(validate)
 }
 
 func (conf *RTCConfig) determineIP() (string, error) {
@@ -58,14 +106,30 @@ func (conf *RTCConfig) determineIP() (string, error) {
 		if conf.RequireIPv4 {
 			getIP = GetExternalIPv4
 		}
+		// Retry: a fresh node may not yet have network egress to the STUN servers
+		// for the first lookups. The try count, the wait between tries, and the
+		// per-lookup timeouts are configurable so a deployment can widen the
+		// boot-time budget without a code change; zero keeps the defaults.
+		tries := conf.ExternalIPRetries
+		if tries <= 0 {
+			tries = externalIPRetries
+		}
+		interval := conf.ExternalIPRetryInterval
+		if interval <= 0 {
+			interval = externalIPRetryInterval
+		}
+		opts := []ExternalIPOption{
+			WithStunPingTimeout(conf.ExternalIPStunTimeout),
+			WithValidationTimeout(conf.ExternalIPValidationTimeout),
+		}
 		var err error
-		for range 3 {
+		for range tries {
 			var ip string
-			ip, err = getIP(context.Background(), stunServers, nil)
+			ip, err = getIP(context.Background(), stunServers, nil, opts...)
 			if err == nil {
 				return ip, nil
 			} else {
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(interval)
 			}
 		}
 		logger.Warnw("could not resolve external IP", err)
@@ -168,7 +232,8 @@ type stunRequest struct {
 // sending a packet to it that must come back to the socket, and the first address
 // whose probe returns wins. Servers can map the socket to different addresses, for
 // example on a multi-homed node, and only some of them may reach back.
-func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool, network string) (string, error) {
+func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool, network string, opts ...ExternalIPOption) (string, error) {
+	o := resolveExternalIPOptions(opts)
 	var laddr *net.UDPAddr
 	if localAddr != nil {
 		udpAddr, ok := localAddr.(*net.UDPAddr)
@@ -179,9 +244,9 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 	}
 	validate = validate && laddr != nil
 
-	ctx1, cancel1 := context.WithTimeout(ctx, lookupTimeout(validate))
+	ctx1, cancel1 := context.WithTimeout(ctx, o.lookupTimeout(validate))
 	defer cancel1()
-	stunCtx, stunCancel := context.WithTimeout(ctx1, stunPingTimeout)
+	stunCtx, stunCancel := context.WithTimeout(ctx1, o.stunPingTimeout)
 	defer stunCancel()
 	// "udp", "udp4", "udp6" -> "ip", "ip4", "ip6", narrowed to the local address family
 	ipNetwork := "ip" + strings.TrimPrefix(network, "udp")
@@ -251,7 +316,7 @@ func findExternalIP(ctx context.Context, stunServers []string, localAddr net.Add
 	// come back, which ends the call
 	probe := func(ip string) {
 		defer wg.Done()
-		pctx, pcancel := context.WithTimeout(ctx1, validationTimeout)
+		pctx, pcancel := context.WithTimeout(ctx1, o.validationTimeout)
 		defer pcancel()
 
 		err := sendProbe(ip, port)
@@ -393,22 +458,22 @@ func resolveSTUNServer(ctx context.Context, server, ipNetwork string) ([]*net.UD
 
 // GetExternalIP return external IP for localAddr from stun server. If localAddr is nil, a local address is chosen automatically,
 // else the address will be used to validate the external IP is accessible from the outside.
-func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
-	return getExternalIP(ctx, stunServers, localAddr, true, "udp")
+func GetExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, opts ...ExternalIPOption) (string, error) {
+	return getExternalIP(ctx, stunServers, localAddr, true, "udp", opts...)
 }
 
 // GetExternalIPv4 is like GetExternalIP but forces the STUN request over IPv4, so
 // it returns an IPv4 reflexive address (or an error if no IPv4 route exists).
-func GetExternalIPv4(ctx context.Context, stunServers []string, localAddr net.Addr) (string, error) {
-	return getExternalIP(ctx, stunServers, localAddr, true, "udp4")
+func GetExternalIPv4(ctx context.Context, stunServers []string, localAddr net.Addr, opts ...ExternalIPOption) (string, error) {
+	return getExternalIP(ctx, stunServers, localAddr, true, "udp4", opts...)
 }
 
-func getExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool, network string) (string, error) {
+func getExternalIP(ctx context.Context, stunServers []string, localAddr net.Addr, validate bool, network string, opts ...ExternalIPOption) (string, error) {
 	if len(stunServers) == 0 {
 		return "", errors.New("STUN servers are required but not defined")
 	}
 
-	return findExternalIP(ctx, stunServers, localAddr, validate, network)
+	return findExternalIP(ctx, stunServers, localAddr, validate, network, opts...)
 }
 
 // probeMagic starts the validation packet, which then names the external IP it was sent to.
