@@ -89,10 +89,6 @@ func (o externalIPOptions) lookupTimeout(validate bool) time.Duration {
 	return o.stunPingTimeout
 }
 
-func lookupTimeout(validate bool) time.Duration {
-	return resolveExternalIPOptions(nil).lookupTimeout(validate)
-}
-
 func (conf *RTCConfig) determineIP() (string, error) {
 	if conf.UseExternalIP {
 		stunServers := conf.STUNServers
