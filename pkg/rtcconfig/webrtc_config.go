@@ -298,6 +298,13 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 	if len(stunServers) == 0 {
 		stunServers = DefaultStunServers
 	}
+	// Honor the configured lookup timeouts here too, so a deployment that widens
+	// external_ip_stun_timeout for slow STUN gets the same budget for per-interface
+	// NAT mapping as for boot-time node-IP resolution.
+	ipOpts := []ExternalIPOption{
+		WithStunPingTimeout(rtcConf.ExternalIPStunTimeout),
+		WithValidationTimeout(rtcConf.ExternalIPValidationTimeout),
+	}
 	localIPs, err := GetLocalIPAddresses(rtcConf.EnableLoopbackCandidate, true, ifFilter, ipFilter)
 	if err != nil {
 		return nil, ipFilter, err
@@ -330,7 +337,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 			mapping := ipmapping{localIP: localIP}
 			defer func() { addrCh <- mapping }()
 			for _, port := range udpPorts {
-				addr, err := getExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port}, !rtcConf.SkipExternalIPValidation, "udp")
+				addr, err := getExternalIP(ctx, stunServers, &net.UDPAddr{IP: net.ParseIP(localIP), Port: port}, !rtcConf.SkipExternalIPValidation, "udp", ipOpts...)
 				if err != nil {
 					if strings.Contains(err.Error(), "address already in use") {
 						logger.Infow("failed to get external ip, address already in use", "local", localIP, "port", port)
@@ -367,7 +374,7 @@ func getNAT1to1IPsForConf(rtcConf *RTCConfig, ifFilter func(string) bool, ipFilt
 	var firstResolved bool
 	var mappedIPs []string
 	natMapping := make(map[string]string)
-	timeout := time.NewTimer(lookupTimeout(!rtcConf.SkipExternalIPValidation))
+	timeout := time.NewTimer(resolveExternalIPOptions(ipOpts).lookupTimeout(!rtcConf.SkipExternalIPValidation))
 	defer timeout.Stop()
 
 done:
