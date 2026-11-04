@@ -106,6 +106,63 @@ func Test_GetExternalIP_PortInUse(t *testing.T) {
 	require.ErrorContains(t, err, "address already in use")
 }
 
+func Test_ExternalIPOptions_Defaults(t *testing.T) {
+	o := resolveExternalIPOptions(nil)
+	require.Equal(t, stunPingTimeout, o.stunPingTimeout)
+	require.Equal(t, validationTimeout, o.validationTimeout)
+	require.Equal(t, stunPingTimeout, o.lookupTimeout(false))
+	require.Equal(t, stunPingTimeout+validationTimeout, o.lookupTimeout(true))
+
+	// zero or negative keeps the default
+	o = resolveExternalIPOptions([]ExternalIPOption{WithStunPingTimeout(0), WithValidationTimeout(-1)})
+	require.Equal(t, stunPingTimeout, o.stunPingTimeout)
+	require.Equal(t, validationTimeout, o.validationTimeout)
+
+	// a positive value overrides
+	o = resolveExternalIPOptions([]ExternalIPOption{WithStunPingTimeout(time.Second), WithValidationTimeout(2 * time.Second)})
+	require.Equal(t, time.Second, o.stunPingTimeout)
+	require.Equal(t, 2*time.Second, o.validationTimeout)
+}
+
+func Test_GetExternalIP_StunPingTimeoutOption(t *testing.T) {
+	// a server that never answers: the lookup must give up at the custom timeout,
+	// well before the 5s default
+	silent, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { silent.Close() })
+
+	start := time.Now()
+	_, err = GetExternalIPv4(context.Background(), []string{silent.LocalAddr().String()}, nil, WithStunPingTimeout(500*time.Millisecond))
+	require.Error(t, err)
+	elapsed := time.Since(start)
+	require.GreaterOrEqual(t, elapsed, 500*time.Millisecond)
+	require.Less(t, elapsed, stunPingTimeout)
+}
+
+func Test_DetermineIP_RetriesAndTimeout(t *testing.T) {
+	// mirrors the cold-boot case: STUN is configured but unreachable. determineIP
+	// must honor the configured try count and per-lookup timeout instead of the
+	// 3-try / 5s defaults.
+	silent, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { silent.Close() })
+
+	conf := &RTCConfig{
+		UseExternalIP:           true,
+		STUNServers:             []string{silent.LocalAddr().String()},
+		ExternalIPRetries:       2,
+		ExternalIPRetryInterval: 100 * time.Millisecond,
+		ExternalIPStunTimeout:   300 * time.Millisecond,
+	}
+	start := time.Now()
+	_, err = conf.determineIP()
+	elapsed := time.Since(start)
+	require.ErrorContains(t, err, "could not resolve external IP")
+	// 2 tries of ~300ms plus one retry interval; far below 3 default tries of 5s
+	require.GreaterOrEqual(t, elapsed, 300*time.Millisecond)
+	require.Less(t, elapsed, 3*time.Second)
+}
+
 func freeUDPAddr(t *testing.T) *net.UDPAddr {
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	require.NoError(t, err)
