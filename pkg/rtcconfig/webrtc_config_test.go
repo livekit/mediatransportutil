@@ -169,6 +169,32 @@ func Test_GetNAT1to1IPsForConf_Families(t *testing.T) {
 	})
 }
 
+func Test_GetNAT1to1IPsForConf_HonorsStunTimeout(t *testing.T) {
+	isLoopback := func(name string) bool { return strings.HasPrefix(name, "lo") }
+	localIPs, err := GetLocalIPAddresses(true, true, isLoopback, nil)
+	require.NoError(t, err)
+	if !slices.Contains(localIPs, "127.0.0.1") {
+		t.Skip("needs IPv4 loopback")
+	}
+
+	// a STUN server that never answers: the mapping phase must give up at the
+	// configured ExternalIPStunTimeout, not the 5s default
+	silent, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { silent.Close() })
+
+	conf := &RTCConfig{
+		STUNServers:              []string{silent.LocalAddr().String()},
+		EnableLoopbackCandidate:  true,
+		SkipExternalIPValidation: true,
+		ExternalIPStunTimeout:    300 * time.Millisecond,
+	}
+	start := time.Now()
+	_, _, err = getNAT1to1IPsForConf(conf, isLoopback, nil)
+	require.NoError(t, err)
+	require.Less(t, time.Since(start), 2*time.Second)
+}
+
 // startSTUNServer answers binding requests with external as the mapped address, after
 // delay. When sources is not nil, it gets the source address of each request.
 func startSTUNServer(t *testing.T, network, addr string, external net.IP, delay time.Duration, sources chan<- net.Addr) string {
