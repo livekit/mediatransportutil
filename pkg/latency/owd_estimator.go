@@ -128,8 +128,8 @@ func (o *OWDEstimator) Update(senderClockTimeNs int64, receiverClockTimeNs int64
 	o.lastDeltaPropagationDelayNs = o.lastPropagationDelayNs - o.estimatedPropagationDelayNs
 	// check for path changes, i. e. a step jump increase in propagation delay observed over time
 	if o.lastDeltaPropagationDelayNs > o.params.PropagationDelayDeltaThresholdMin.Nanoseconds() { // ignore small changes for path change consideration
-		if o.longTermDeltaPropagationDelayNs != 0 &&
-			o.lastDeltaPropagationDelayNs > o.longTermDeltaPropagationDelayNs*o.params.PropagationDelayDeltaThresholdMaxFactor {
+		// a zero long term estimate must not skip this check, the estimate would never rise again
+		if o.lastDeltaPropagationDelayNs > o.longTermDeltaPropagationDelayNs*o.params.PropagationDelayDeltaThresholdMaxFactor {
 			o.propagationDelayDeltaHighCount++
 			if o.propagationDelayDeltaHighStartTime.IsZero() {
 				o.propagationDelayDeltaHighStartTime = time.Now()
